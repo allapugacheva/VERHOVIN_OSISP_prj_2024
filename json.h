@@ -1,7 +1,10 @@
+#pragma once
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include "checkingFunctions.h"
+#include "stringFunctions.h"
 
 struct object_fields;
 
@@ -17,11 +20,8 @@ typedef union values {
 typedef struct object_field {
 
     char* fieldName;
-
     int type;
-
     VALUES value;
-
     int size;
 
 } OBJECT_FIELD;
@@ -57,11 +57,11 @@ typedef struct json_node {
 #define TABULATION(n) for (int i = 0; i<n; i++) printf("\t")
 
 JSON_NODE* createJsonNode();
-JSON_NODE* createBoolJsonNode(bool boolValue, char* fieldName);
-JSON_NODE* createNumberJsonNode(double numberValue, char* fieldName);
-JSON_NODE* createStringJsonNode(char* stringValue, char* fieldName);
-JSON_NODE* createObjectJsonNode(JSON_NODE* objectValue, char* fieldName);
-JSON_NODE* createArrayJsonNode(JSON_NODE* arrayValue, char* fieldName);
+JSON_NODE* createBoolJsonNode(bool boolValue, const char* fieldName);
+JSON_NODE* createNumberJsonNode(double numberValue, const char* fieldName);
+JSON_NODE* createStringJsonNode(const char* stringValue, const char* fieldName);
+JSON_NODE* createObjectJsonNode(JSON_NODE* objectValue, const char* fieldName);
+JSON_NODE* createArrayJsonNode(JSON_NODE* arrayValue, const char* fieldName);
 
 void removeJson(JSON_NODE** json);
 void removeJsonNode(JSON_NODE** jsonNode);  // remove from list
@@ -71,13 +71,13 @@ void addToJsonToNPos(JSON_NODE** json, JSON_NODE* node, int position);
 
 void updateJsonNodeToBool(JSON_NODE** jsonNode, bool boolValue);
 void updateJsonNodeToNumber(JSON_NODE** jsonNode, double numberValue);
-void updateJsonNodeToString(JSON_NODE** jsonNode, char* stringValue);
+void updateJsonNodeToString(JSON_NODE** jsonNode, const char* stringValue);
 void updateJsonNodeToObject(JSON_NODE** jsonNode, JSON_NODE* objectValue);
 void updateJsonNodeToArray(JSON_NODE** jsonNode, JSON_NODE* arrayValue);
 
-JSON_NODE* createBoolArray(bool* boolArray, int size);
-JSON_NODE* createNumberArray(double* numberArray, int size);
-JSON_NODE* createStringArray(char** stringArray, int size);
+JSON_NODE* createBoolArray(const bool* boolArray, int size);
+JSON_NODE* createNumberArray(const double* numberArray, int size);
+JSON_NODE* createStringArray(const char** stringArray, int size);
 JSON_NODE* createObjectArray(JSON_NODE* objectArray, int size);
 
 void deleteArray(JSON_NODE** array);
@@ -87,14 +87,14 @@ JSON_NODE* findByIndex(JSON_NODE* array, int index);
 
 JSON_NODE* createObject(int countFields, OBJECT_FIELD* fields);
 void deleteObject(JSON_NODE** object);
-bool hasObjectField(JSON_NODE* object, char* fieldName);
+bool hasObjectField(JSON_NODE* object, const char* fieldName);
 
-void addToObjectToNPlace(JSON_NODE** objectNode, JSON_NODE* value, int position);
-void removeFromObject(JSON_NODE** objectNode, char* fieldName);
-JSON_NODE* findByFieldName(JSON_NODE* object, char* fieldName);
+void addToObjectToNPos(JSON_NODE** objectNode, JSON_NODE* value, int position);
+void removeFromObject(JSON_NODE** objectNode, const char* fieldName);
+JSON_NODE* findByFieldName(JSON_NODE* object, const char* fieldName);
 
 void printJsonStructured(JSON_NODE* json);
 void printJsonUnstructured(JSON_NODE* json);
 
 char* parseJsonToString(JSON_NODE* json);
-JSON_NODE* parseStringToJson(char* string);
+JSON_NODE* parseStringToJson(const char* string);
