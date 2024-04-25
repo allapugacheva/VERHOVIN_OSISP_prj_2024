@@ -1,89 +1,96 @@
 #include "http.h"
 
+// Инициализация сокетного соединения клиента.
 int initClient(const char* address, int portNumber) {
 
-    struct hostent* server;
-    struct sockaddr_in addr;
-    if(portNumber == -1)
+    pthread_self() == thread1 ? sPush(&checkStack1, "initClient") : sPush(&checkStack2, "initClient");
+
+    if(address == NULL)
+        return *(int*)handleError("address is NULL.", true, NULL, 6, NULL, 0, NULL);
+
+    struct hostent* server;                                                                                  // Структура для представления информации о хосте.
+    struct sockaddr_in addr;                                                                                 // Структура для представления сетевого адреса протокола IPv4
+    if(portNumber == -1)                                                                                     // Обработка номера порта.
         portNumber = 8080;
 
-    server = gethostbyname(address);
+    server = gethostbyname(address);                                                                   // Получение информации о хосте по его имени.
 
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(portNumber); // ????
+    addr.sin_family = AF_INET;                                                                               // Установка параметров сетевого адреса.
+    addr.sin_port = htons(portNumber);
     bcopy((char*)server->h_addr_list[0], (char*)&addr.sin_addr.s_addr, server->h_length);
 
-    int sfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sfd == -1) {
-        close(sfd);
-        return -1;
-    }
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);                                           // Инициализация сокета для клиента.
+    if(sfd == -1)
+        return *(int*) handleError("error while create socket.", true, NULL, 6, NULL, 1, (int[]){sfd});
 
-    while(connect(sfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+    while(connect(sfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {                         // Ожидание соединения с сервером.
 
-        if(errno == ENOENT) {
+        if(errno == ENOENT) {                                                                                // Проверка, что хост или порт просто не существует или не отвечает.
             sleep(1);
             continue;
-        } else {
-            close(sfd);
-            return -1;
-        }
+        } else
+            return *(int*) handleError("error while connect to server.", true, NULL, 6, NULL, 1, (int[]){sfd});
     }
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return sfd;
 }
+
+// Инициализация сервера.
 int initServer(int portNumber) {
 
-    if(portNumber == -1)
+    pthread_self() == thread1 ? sPush(&checkStack1, "initServer") : sPush(&checkStack2, "initServer");
+
+    if(portNumber == -1)                                                                                     // Обработка номера порта.
         portNumber = 8080;
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
+
+    struct sockaddr_in addr;                                                                                 // Структура для представления сетевого адреса протокола IPv4.
+    addr.sin_family = AF_INET;                                                                               // Установка параметров сетевого адреса.
     addr.sin_port = htons(portNumber);
     addr.sin_addr.s_addr = INADDR_ANY;
 
-    int sfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sfd == -1) {
-        close(sfd);
-        return -1;
-    }
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);                                          // Инициализация сокета.
+    if(sfd == -1)
+        return *(int*)handleError("error while create socket.", true, NULL, 6, NULL, 1, (int[]){sfd});
 
     int opt = 1;
-    if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        close(sfd);
-        return -1;
-    }
+    if(setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)      // Установка параметров сокета.
+        return *(int*)handleError("error while set socket options.", true, NULL, 6, NULL, 1, (int[]){sfd});
 
-    if(bind(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        close(sfd);
-        return -1;
-    }
+    if(bind(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1)                                 // Привязка сокета к порту.
+        return *(int*)handleError("error while bind socket.", true, NULL, 6, NULL, 1, (int[]){sfd});
 
-    if(listen(sfd, 50) == -1) {
-        close(sfd);
-        return -1;
-    }
+    if(listen(sfd, 50) == -1)                                                                        // Сокет готов принимать клиентов.
+        return *(int*)handleError("error while listen.", true, NULL, 6, NULL, 1, (int[]){sfd});
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return sfd;
 }
 
+// Инициализация HTTP пустого запроса.
 HTTP_REQUEST* requestInit() {
 
     HTTP_REQUEST* request = REQUEST_MALLOC;
 
-    request->content = NULL;
+    request->content = NULL;                                                                               // Инициализация указателей пустыми значениями.
     request->headers = NULL;
     request->url = NULL;
     request->port = -1;
 
     return request;
 }
+
+// Инициализация HTTP запроса с параметрами.
 HTTP_REQUEST* requestInitWithParams(int requestType, const char* url, HEADER* headers, const char* content, int portNumber) {
 
-    checkPointer(url, "requestInitWithParams", "url");
+    pthread_self() == thread1 ? sPush(&checkStack1, "requestInitWithParams") : sPush(&checkStack2, "requestInitWithParams");
+
+    if(url == NULL)
+        return (HTTP_REQUEST*)handleError("url is NULL.", true, NULL, 5, NULL, 0, NULL);
 
     HTTP_REQUEST* request = REQUEST_MALLOC;
 
-    request->requestType = requestType;
+    request->requestType = requestType;                                                                   // Указание значений полям запроса.
     copyString(&request->url, url);
     if(content != NULL)
         copyString(&request->content, content);
@@ -92,99 +99,130 @@ HTTP_REQUEST* requestInitWithParams(int requestType, const char* url, HEADER* he
     request->headers = headers;
     request->port = portNumber;
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return request;
 }
-void requestFree(HTTP_REQUEST** request) {
 
-    headersFree(&(*request)->headers);
+// Очистка HTTP запроса.
+bool requestFree(HTTP_REQUEST** request) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "requestFree") : sPush(&checkStack2, "requestFree");
+
+    if(checkDoublePointer((const void**)request) == false)
+        return *(bool*)handleError("request is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    headersFree(&(*request)->headers);                                                                  // Очистка всех указателей.
     free((*request)->content);
     free((*request)->url);
     free(*request);
 
     *request = NULL;
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
+// Инициализация пустого HTTP ответа.
 HTTP_RESPONSE* responseInit() {
 
     HTTP_RESPONSE* response = RESPONSE_MALLOC;
 
-    response->headers = NULL;
+    response->headers = NULL;                                                                         // Инициализация указателей пустыми значениями.
     response->content = NULL;
     response->responseStatus = NULL;
 
     return response;
 }
+
+// Инициализация HTTP ответа с параметрами.
 HTTP_RESPONSE* responseInitWithParams(const char* responseStatus, HEADER* headers, const char* content) {
 
-    checkPointer(responseStatus, "responseInitWithParams", "responseStatus");
+    pthread_self() == thread1 ? sPush(&checkStack1, "responseInitWithParams") : sPush(&checkStack2, "responseInitWithParams");
+
+    if(responseStatus == NULL)
+        return (HTTP_RESPONSE*)handleError("responseStatus is NULL.", true, NULL, 4, NULL, 0, NULL);
 
     HTTP_RESPONSE* response = RESPONSE_MALLOC;
 
-    response->headers = headers;
+    response->headers = headers;                                                                      // Указание значений полям.
     if(content != NULL)
         copyString(&response->content, content);
     else
         response->content = NULL;
     copyString(&response->responseStatus, responseStatus);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return response;
 }
-void responseFree(HTTP_RESPONSE** response) {
 
-    headersFree(&(*response)->headers);
+// Очистка HTTP ответа.
+bool responseFree(HTTP_RESPONSE** response) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "responseFree") : sPush(&checkStack2, "responseFree");
+
+    if(checkDoublePointer((const void**)response) == false)
+        return *(bool*)handleError("response is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    headersFree(&(*response)->headers);                                                              // Очистка всех указателей.
     free((*response)->content);
     free((*response)->responseStatus);
 
     *response = NULL;
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
+// Парсинг строки название_заголовка:значений
 static char** parseNameValueString(const char* nameValue) {
 
     char **result = (char **) malloc(2 * sizeof(char *));
     int i = 0;
 
-    result[0] = copyStringFromIToSymbol(nameValue, &i, ':');
+    result[0] = copyStringFromIToSymbol(nameValue, &i, ':');                                // Разделение строки на две части.
     i += 2;
     result[1] = copyStringFromIToSymbol(nameValue, &i, '\0');
 
     return result;
 }
-HEADER* initHeaders(int count, ...) {
 
-    checkNumber(count, 1, -1, "initHeaders");
+// Инициализация заголовков.
+HEADER* initHeaders(int count, const char** nameValues) {
 
-    va_list args;
-    va_start(args, count);
+    pthread_self() == thread1 ? sPush(&checkStack1, "initHeaders") : sPush(&checkStack2, "initHeaders");
+
+    if(checkNumber(count, 1, -1) == false || checkArray((const void**)nameValues, count) == false)
+        return (HEADER*) handleError("nameValues is NULL or count has wrong value.", true, NULL, 3, NULL, 0, NULL);
 
     HEADER* headers = NULL;
-    for(int i = 0; i<count; i++) {
-        const char* temp = va_arg(args, const char*);
-        addToHeaders(&headers, temp);
-    }
-    va_end(args);
+    for(int i = 0; i<count; i++)                                                                    // Обход всех заголовков.
+        addToHeaders(&headers, nameValues[i]);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return headers;
 }
+
+// Добавление значения в заголовки.
 static void addToHeaders(HEADER** headers, const char* nameValue) {
 
     HEADER* tempHeader = *headers;
 
     if(tempHeader == NULL) {
-        *headers = HEADER_MALLOC;
+        *headers = HEADER_MALLOC;                                                                   // Добавление в начало, если ещё нет заголовков.
         (*headers)->next = NULL;
         (*headers)->prev = NULL;
         tempHeader = *headers;
     } else {
-        while (tempHeader->next != NULL)
+        while (tempHeader->next != NULL)                                                            // Переход в конец.
             tempHeader = tempHeader->next;
 
-        tempHeader->next = HEADER_MALLOC;
+        tempHeader->next = HEADER_MALLOC;                                                           // Добавление в конец.
         tempHeader->next->next = NULL;
         tempHeader->next->prev = tempHeader;
         tempHeader = tempHeader->next;
     }
 
-    char** result = parseNameValueString(nameValue);
+    char** result = parseNameValueString(nameValue);                                                // Добавление названия заголовка и значения.
     copyString(&tempHeader->name, result[0]);
     copyString(&tempHeader->value, result[1]);
 
@@ -192,18 +230,28 @@ static void addToHeaders(HEADER** headers, const char* nameValue) {
     free(result[1]);
     free(result);
 }
+
+// Поиск заголовка по названию.
 HEADER* findHeader(HEADER* headers, const char* name) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "findHeader") : sPush(&checkStack2, "findHeader");
+
+    if(headers == NULL || name == NULL)
+        return (HEADER*) handleError("headers or name is NULL.", true, NULL, 3, NULL, 0, NULL);
 
     HEADER* result = headers;
 
-    while(result != NULL && compareString(result->name, name) != 0)
+    while(result != NULL && compareString(result->name, name) != 0)                        // Обход всех и сравнение.
         result = result->next;
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
+
+// Освобождение всех заголовков.
 static void headersFree(HEADER** headers) {
 
-    while(*headers != NULL) {
+    while(*headers != NULL) {                                                                       // Обход всех и освобождение.
 
         free((*headers)->value);
         free((*headers)->name);
@@ -214,21 +262,31 @@ static void headersFree(HEADER** headers) {
     }
 }
 
-void setHttpRequestType(HTTP_REQUEST** request, int type) {
+// Установить тип HTTP запроса.
+bool setHttpRequestType(HTTP_REQUEST** request, int type) {
 
-    checkDoublePointer((void**)request, "setHttpRequestType", "request");
-    checkNumber(type, 0, 3, "setHttpRequestType");
+    pthread_self() == thread1 ? sPush(&checkStack1, "setHttpRequestType") : sPush(&checkStack2, "setHttpRequestType");
 
-    (*request)->requestType = type;
+    if(checkDoublePointer((const void**)request) == false || checkNumber(type, 0, 3) == false)
+        return *(bool*)handleError("request is NULL or type has wrong value.", true, NULL, 1, NULL, 0, NULL);
+
+    (*request)->requestType = type;                                                                // Установка типа.
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
-void setHttpRequestUrl(HTTP_REQUEST** request, const char* url) {
 
-    checkDoublePointer((void**)request, "setHttpRequestUrl", "request");
-    checkPointer(url, "setHttpRequestUrl", "url");
+// Установка юрл HTTP запроса.
+bool setHttpRequestUrl(HTTP_REQUEST** request, const char* url) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "setHttpRequestUrl") : sPush(&checkStack2, "setHttpRequestUrl");
+
+    if(checkDoublePointer((const void**)request) == false || url == NULL)
+        return *(bool*)handleError("request is NULL or url is NULL.", true, NULL, 1, NULL, 0, NULL);
 
     char* host, *address;
     int i = 0, iLen = stringLength(url);
-    for(;i < iLen && url[i] != '/' && url[i] != ':'; i++);
+    for(;i < iLen && url[i] != '/' && url[i] != ':'; i++);                                          // Пропуск http://, если есть.
 
     if(i < iLen && url[i+1] == '/')
         i+=2;
@@ -236,37 +294,50 @@ void setHttpRequestUrl(HTTP_REQUEST** request, const char* url) {
         i = 0;
 
     bool hasPort = false;
-    for(int j = i; url[j] != '/'; j++)
+    for(int j = i; url[j] != '/'; j++)                                                              // Проверка на наличие порта.
         if(url[j] == ':') {
             hasPort = true;
             break;
         }
 
-    if(hasPort) {
+    if(hasPort == true) {
 
         host = copyStringFromIToSymbol(url, &i, ':');
         i++;
-        (*request)->port = (int)CTOD(copyStringFromIToSymbol(url, &i, '/'));
+        (*request)->port = (int)stringToDouble(copyStringFromIToSymbol(url, &i, '/')); // Считывание порта, если есть.
     }
     else
         host = copyStringFromIToSymbol(url, &i, '/');
+
     if(i < iLen)
-        address = copyStringFromIToSymbol(url, &i, '\0');
+        address = copyStringFromIToSymbol(url, &i, '\0');                                  // Считывание адреса.
     else
-        address = "/";
+        copyString(&address, "/");
 
     char* header = (char*)malloc(7 + stringLength(host));
     sprintf(header, "Host: %s", host);
-    addHttpRequestHeader(request, initHeaders(1, header));
+
+    addHttpRequestHeader(request, initHeaders(1, (const char*[]){header}));  // Установка хоста.
+
+    copyString(&(*request)->url, address);                                                         // Установка адреса.
+
     free(header);
-    copyString(&(*request)->url, address);
+    free(address);
+    free(host);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
-void addHttpRequestHeader(HTTP_REQUEST** request, HEADER* httpHeader) {
 
-    checkDoublePointer((void**)request, "addHttpRequestHeader", "request");
-    checkPointer(httpHeader, "addHttpRequestHeader", "httpHeader");
+// Добавление заголовка в HTTP запрос.
+bool addHttpRequestHeader(HTTP_REQUEST** request, HEADER* httpHeader) {
 
-    if((*request)->headers == NULL)
+    pthread_self() == thread1 ? sPush(&checkStack1, "addHttpRequestHeader") : sPush(&checkStack2, "addHttpRequestHeader");
+
+    if(checkDoublePointer((const void**)request) == false || httpHeader == NULL || IS_HEADER_ERROR(*httpHeader))
+        return *(bool*)handleError("request or httpHeader is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    if((*request)->headers == NULL)                                                                  // Добавление заголовка в начало или в конец.
         (*request)->headers = httpHeader;
     else {
         HEADER* tempHeader = (*request)->headers;
@@ -277,55 +348,45 @@ void addHttpRequestHeader(HTTP_REQUEST** request, HEADER* httpHeader) {
         tempHeader->next = httpHeader;
         httpHeader->prev = tempHeader;
     }
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
-void setHttpRequestData(HTTP_REQUEST** request, const char* data) {
 
-    checkDoublePointer((void**)request, "setHttpRequestData", "request");
-    checkPointer(data, "setHttpRequestData", "data");
+// Установка данных HTTP запроса.
+bool setHttpRequestData(HTTP_REQUEST** request, const char* data) {
 
-    copyString(&(*request)->content, data);
+    pthread_self() == thread1 ? sPush(&checkStack1, "setHttpRequestData") : sPush(&checkStack2, "setHttpRequestData");
+
+    if(checkDoublePointer((const void**)request) == false || data == NULL)
+        return *(bool*)handleError("request or data is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    copyString(&(*request)->content, data);                                                 // Копирование данных.
 
     char* header = (char*)malloc(17 + findNumberLen(stringLength(data)));
     sprintf(header, "Content-Length: %d", stringLength(data));
-    addHttpRequestHeader(request, initHeaders(1, header));
+
+    addHttpRequestHeader(request, initHeaders(1, (const char*[]){header})); // Добавление заголовка с длиной данных.
+
+    free(header);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-static int findHttpRequestStringLength(HTTP_REQUEST* request) {
-
-    int length = 15; // space between request type and url, url and version, \n after version, \n after headers, http version
-    switch(request->requestType) {
-        case put_request:
-        case get_request:
-            length+= 3;
-            break;
-        case post_request:
-            length += 4;
-            break;
-        case delete_request:
-            length += 6;
-            break;
-    }
-    length += stringLength(request->url);
-    if(request->content != NULL)
-        length += stringLength(request->content) + 1;
-
-    for(HEADER* header = request->headers; header != NULL; header = header->next) {
-        length += stringLength(header->name);
-        length += 4;
-        length += stringLength(header->value);
-    }
-
-    return length;
-}
-
+// Конвертация HTTP запроса в строку.
 char* convertHttpRequestToString(HTTP_REQUEST* request) {
 
-    int stringLength = findHttpRequestStringLength(request);
-    char *result = (char *) malloc(1);
+    pthread_self() == thread1 ? sPush(&checkStack1, "convertHttpRequestToString") : sPush(&checkStack2, "convertHttpRequestToString");
+
+    if(request == NULL)
+        return handleError("request is NULL.", true, NULL, 0, NULL, 0, NULL);
+
+    char *result = (char*) malloc(1);
     result[0] = '\0';
 
     char *temp = (char *) malloc(256);
-    switch (request->requestType) {
+    switch (request->requestType) {                                                                  // Обработка первой строки запроса.
         case put_request:
             sprintf(temp, "PUT %s %s\r\n", request->url, HTTP_PROTOCOL_VERSION);
             break;
@@ -342,7 +403,7 @@ char* convertHttpRequestToString(HTTP_REQUEST* request) {
     addString(&result, temp);
     free(temp);
 
-    for (HEADER *header = request->headers; header != NULL; header = header->next) {
+    for (HEADER *header = request->headers; header != NULL; header = header->next) {                // Обработка заголовков запроса.
         temp = (char *) malloc(256);
 
         sprintf(temp, "%s: %s\r\n", header->name, header->value);
@@ -353,18 +414,24 @@ char* convertHttpRequestToString(HTTP_REQUEST* request) {
     addString(&result, "\r\n");
 
     if (request->content != NULL)
-        addString(&result, request->content);
+        addString(&result, request->content);                                              // Обработка содержимого запроса.
 
-    result[stringLength - 1] = '\0';
-
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
+
+// Конвертировать строку в HTTP запрос.
 HTTP_REQUEST* convertHttpRequestToObject(const char* request) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "convertHttpRequestToObject") : sPush(&checkStack2, "convertHttpRequestToObject");
+
+    if(request == NULL)
+        return (HTTP_REQUEST*)handleError("request or data is NULL.", true, NULL, 5, NULL, 0, NULL);
 
     HTTP_REQUEST* result = REQUEST_MALLOC;
 
     int i = 0;
-    switch (request[0]) {
+    switch (request[0]) {                                                                           // Получение типа запроса.
         case 'G':
             result->requestType = get_request;
             break;
@@ -377,28 +444,37 @@ HTTP_REQUEST* convertHttpRequestToObject(const char* request) {
     }
 
     while(request[i++] != ' ');
-    copyString(&result->url, copyStringFromIToSymbol(request, &i, ' '));
+    char* temp = copyStringFromIToSymbol(request, &i, ' ');
+    copyString(&result->url, temp);                                                       // Получение юрл запроса.
+    free(temp);
 
     while(request[i++] != '\n');
 
     HEADER* headers = NULL;
-    while(i < stringLength(request) && request[i] != '\r' && request[i] != '\0') {
+    while(i < stringLength(request) && request[i] != '\r' && request[i] != '\0') {           // Получение заголовков запроса.
 
-        addToHeaders(&headers, copyStringFromIToSymbol(request, &i, '\r'));
+        temp = copyStringFromIToSymbol(request, &i, '\r');
+        addToHeaders(&headers, temp);
+        free(temp);
         if(request[i] != '\0')
             i+=2;
     }
     result->headers = headers;
 
     i+=2;
-    if(i < stringLength(request))
-        copyString(&result->content, copyStringFromIToSymbol(request, &i, '\0'));
+    if(i < stringLength(request)) {
+        temp = copyStringFromIToSymbol(request, &i, '\0');
+        copyString(&result->content, temp);                                              // Получение содержимого запроса, если есть.
+        free(temp);
+    }
     else
         result->content = NULL;
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
 
+// Проверка запроса на наличие необходимых данных.
 static bool checkHttpRequest(HTTP_REQUEST* request) {
 
     if(request->url == NULL)
@@ -406,7 +482,7 @@ static bool checkHttpRequest(HTTP_REQUEST* request) {
     if(request->headers == NULL)
         return false;
 
-    if(findHeader(request->headers, "Host") == NULL || findHeader(request->headers, "User-Agent") == NULL)
+    if(findHeader(request->headers, "Host") == NULL || findHeader(request->headers, "User-Agent") == NULL)  // Поиск нужных заголовков.
         return false;
     if(request->requestType == get_request) {
         if(findHeader(request->headers, "Accept") == NULL)
@@ -418,78 +494,79 @@ static bool checkHttpRequest(HTTP_REQUEST* request) {
 
     return true;
 }
+
+// Отправка HTTP запроса.
 HTTP_RESPONSE* sendHttpRequest(HTTP_REQUEST** request) {
 
-    checkDoublePointer((void**)request, "sendHttpRequest", "request");
+    pthread_self() == thread1 ? sPush(&checkStack1, "sendHttpRequest") : sPush(&checkStack2, "sendHttpRequest");
 
-    if ((*request)->content == NULL && (*request)->requestType != get_request)
-        addHttpRequestHeader(request, initHeaders(1, "Content-Length: 0"));
+    if(checkDoublePointer((const void**)request) == false)
+        return (HTTP_RESPONSE*)handleError("request is NULL.", true, NULL, 4, NULL, 0, NULL);
 
-    if (!checkHttpRequest(*request)) {
-        printf("Not enough data in request.\n");
-        exit(0);
-    }
-    int sfd = initClient(findHeader((*request)->headers, "Host")->value, (*request)->port);
+    if (((*request)->content == NULL && (*request)->requestType != get_request) && ((*request)->headers == NULL || findHeader((*request)->headers, "Content-Length") == NULL))
+        addHttpRequestHeader(request, initHeaders(1, (const char*[]){"Content-Length: 0"}));
+
+    if (checkHttpRequest(*request) == false)
+        return (HTTP_RESPONSE*)handleError("request hasn't got enough information.", true, NULL, 4, NULL, 0, NULL);
+
+    int sfd = initClient(findHeader((*request)->headers, "Host")->value, (*request)->port);     // Инициализация клиента.
     if(sfd == -1)
-        return NULL;
+        return (HTTP_RESPONSE*)handleError("error while initialise client.", true, NULL, 4, NULL, 0, NULL);
 
-    char *httpRequestString = convertHttpRequestToString(*request), *httpResponseString = (char *) malloc(512);
+    char *httpRequestString = convertHttpRequestToString(*request);                                                     // Получение запроса в строковом представлении.
+    char *httpResponseString = (char*)malloc(256);                                                                 // Выделение места под ответ.
 
-    struct timeval timeout;
+    struct timeval timeout;                                                                                             // Структура для времени ожидания получения ответа.
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
 
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(sfd, &readfds);
+    fd_set readfds;                                                                                                     // Набор дескрипторов для select.
+    FD_ZERO(&readfds);                                                                                                  // Инициализация нулевым значением набора.
+    FD_SET(sfd, &readfds);                                                                                              // Добавление дескриптора клиента.
 
-    if (send(sfd, httpRequestString, stringLength(httpRequestString), 0) <= 0) {
-        printf("Error while send request.\n");
-        close(sfd);
-        exit(0);
-    }
+    if (send(sfd, httpRequestString, stringLength(httpRequestString) + 1, 0) <= 0)                    // Отправить запрос.
+        return (HTTP_RESPONSE*)handleError("error while send request.", true, NULL, 4, NULL, 1, (int[]){sfd});
 
-    int ready = select(sfd + 1, &readfds, NULL, NULL, &timeout);
-    if(ready <= 0) {
-        printf("Error while reading request.\n");
-        close(sfd);
-        exit(0);
-    }
+    int ready = select(sfd + 1, &readfds, NULL, NULL, &timeout);                                  // Ожидание ответа от сервера.
+    if(ready <= 0)
+        return (HTTP_RESPONSE*)handleError("error while wait for response.", true, NULL, 4, NULL, 1, (int[]){sfd});
 
-    if (recv(sfd, httpResponseString, 512, 0) <= 0) {
-        printf("Error while receive response.\n");
-        close(sfd);
-        exit(0);
-    }
+    if (recv(sfd, httpResponseString, 256, 0) <= 0)                                                     // Приём ответа.
+        return (HTTP_RESPONSE*)handleError("error while receive response from server.", true, NULL, 4, NULL, 1, (int[]){sfd});
 
-    HTTP_RESPONSE *response = convertHttpResponseToObject(httpResponseString);
-
-    if (compareString(response->responseStatus, HTTP_STATUS_200) != 0) {
-        printf("Error while send request.\n");
-        close(sfd);
-        exit(0);
-    }
+    HTTP_RESPONSE *response = convertHttpResponseToObject(httpResponseString);                                  // Преобразование ответа в объект.
 
     free(httpRequestString);
     free(httpResponseString);
     close(sfd);
 
-    return NULL;
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return response;
 }
 
-void setHttpResponseStatus(HTTP_RESPONSE** response, const char* status) {
+// Установка HTTP статуса для ответа.
+bool setHttpResponseStatus(HTTP_RESPONSE** response, const char* status) {
 
-    checkDoublePointer((void**)response, "setHttpResponseStatus", "response");
-    checkPointer(status, "setHttpResponseStatus", "status");
+    pthread_self() == thread1 ? sPush(&checkStack1, "setHttpResponseStatus") : sPush(&checkStack2, "setHttpResponseStatus");
 
-    copyString(&(*response)->responseStatus, status);
+    if(checkDoublePointer((const void**)response) == false || status == NULL)
+        return *(bool*)handleError("response or status is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    copyString(&(*response)->responseStatus, status);                                               // Установить тип.
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
-void addHttpResponseHeader(HTTP_RESPONSE** response, HEADER* httpHeader) {
 
-    checkDoublePointer((void**)response, "addHttpResponseHeader", "response");
-    checkPointer(httpHeader, "addHttpResponseHeader", "httpHeader");
+// Добавление заголовка в HTTP ответ.
+bool addHttpResponseHeader(HTTP_RESPONSE** response, HEADER* httpHeader) {
 
-    if((*response)->headers == NULL)
+    pthread_self() == thread1 ? sPush(&checkStack1, "addHttpResponseHeader") : sPush(&checkStack2, "addHttpResponseHeader");
+
+    if(checkDoublePointer((const void**)response) == false || httpHeader == NULL)
+        return *(bool*)handleError("response or httpHeader is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    if((*response)->headers == NULL)                                                                        // Добавление заголовка в начало или конец.
         (*response)->headers = httpHeader;
     else {
         HEADER* tempHeader = (*response)->headers;
@@ -500,48 +577,49 @@ void addHttpResponseHeader(HTTP_RESPONSE** response, HEADER* httpHeader) {
         tempHeader->next = httpHeader;
         httpHeader->prev = tempHeader;
     }
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
-void setHttpResponseData(HTTP_RESPONSE** response, const char* data) {
 
-    checkDoublePointer((void**)response, "setHttpResponseData", "response");
-    checkPointer(data, "setHttpResponseData", "data");
+// Установка контента HTTP ответа.
+bool setHttpResponseData(HTTP_RESPONSE** response, const char* data) {
 
-    copyString(&(*response)->content, data);
+    pthread_self() == thread1 ? sPush(&checkStack1, "setHttpResponseData") : sPush(&checkStack2, "setHttpResponseData");
+
+    if(checkDoublePointer((const void**)response) == false || data == NULL)
+        return *(bool*)handleError("response or data is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    copyString(&(*response)->content, data);                                                        // Копирование содержимого.
 
     char* header = (char*)malloc(17 + findNumberLen(stringLength(data)));
-    sprintf(header, "Content-Length: %d", stringLength(data));
-    addHttpResponseHeader(response, initHeaders(1, header));
+    sprintf(header, "Content-Length: %d", stringLength(data));                               // Установка заголовка с длиной.
+
+    addHttpResponseHeader(response, initHeaders(1, (const char*[]){header}));
+
+    free(header);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-static int findHttpResponseLength(HTTP_RESPONSE* response) {
-
-    int length = 14; // space between version and status, \n after status, \n after headers, http version
-
-    if(response->content != NULL)
-        length += stringLength(response->content);
-    length += stringLength(response->responseStatus);
-
-    for(HEADER* header = response->headers; header != NULL; header = header->next) {
-        length += stringLength(header->name);
-        length += 4;
-        length += stringLength(header->value);
-    }
-
-    return length;
-}
-
+// Конвертирование HTTP ответа в строку.
 char* convertHttpResponseToString(HTTP_RESPONSE* response) {
 
-    int stringLength = findHttpResponseLength(response);
-    char *result = (char *) malloc(stringLength);
+    pthread_self() == thread1 ? sPush(&checkStack1, "convertHttpResponseToString") : sPush(&checkStack2, "convertHttpResponseToString");
+
+    if(response == NULL)
+        return handleError("response is NULL.", true, NULL, 0, NULL, 0, NULL);
+
+    char *result = (char *) malloc(1);
     result[0] = '\0';
 
-    char *temp = (char *) malloc(256);
+    char *temp = (char *) malloc(256);                                                                 // Обработка первой строки ответа.
     sprintf(temp, "%s %s\r\n", HTTP_PROTOCOL_VERSION, response->responseStatus);
     addString(&result, temp);
     free(temp);
 
-    for (HEADER *header = response->headers; header != NULL; header = header->next) {
+    for (HEADER *header = response->headers; header != NULL; header = header->next) {                       // Обработка заголовков.
         temp = (char *) malloc(256);
 
         sprintf(temp, "%s: %s\r\n", header->name, header->value);
@@ -552,46 +630,61 @@ char* convertHttpResponseToString(HTTP_RESPONSE* response) {
     addString(&result, "\r\n");
 
     if (response->content != NULL)
-        addString(&result, response->content);
+        addString(&result, response->content);                                                    // Обработка содержимого ответа.
 
-    result[stringLength - 1] = '\0';
-
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
+
+// Конвертирование строки в HTTP объект.
 HTTP_RESPONSE* convertHttpResponseToObject(const char* response) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "convertHttpResponseToObject") : sPush(&checkStack2, "convertHttpResponseToObject");
+
+    if(response == NULL)
+        return (HTTP_RESPONSE*)handleError("response is NULL.", true, NULL, 4, NULL, 0, NULL);
 
     HTTP_RESPONSE * result = RESPONSE_MALLOC;
     int i = 0;
 
     while(response[i++] != ' ');
 
-    copyString(&result->responseStatus, copyStringFromIToSymbol(response, &i, '\r'));
+    char* temp = copyStringFromIToSymbol(response, &i, '\r');
+    copyString(&result->responseStatus, temp);                                                   // Получение HTTP статуса.
+    free(temp);
     i+=2;
 
     HEADER* headers = NULL;
-    while(i < stringLength(response) && response[i] != '\r') {
+    while(i < stringLength(response) && response[i] != '\r') {                                      // Получение заголовков.
 
-        addToHeaders(&headers, copyStringFromIToSymbol(response, &i, '\r'));
+        temp = copyStringFromIToSymbol(response, &i, '\r');
+        addToHeaders(&headers, temp);
+        free(temp);
         i+=2;
     }
     result->headers = headers;
 
     i+=2;
-    if(i < stringLength(response))
-        copyString(&result->content, copyStringFromIToSymbol(response, &i, '\0'));
+    if(i < stringLength(response)) {
+        temp = copyStringFromIToSymbol(response, &i, '\0');
+        copyString(&result->content, temp);                                                      // Получение содержимого ответа.
+        free(temp);
+    }
     else
         result->content = NULL;
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
 
+// Проверка HTTP ответа на наличие необходимых полей.
 static bool checkHttpResponse(HTTP_RESPONSE* response) {
 
     if(response->responseStatus == NULL)
         return false;
     if(response->headers == NULL)
         return false;
-    if(findHeader(response->headers, "Content-Length") == NULL)
+    if(findHeader(response->headers, "Content-Length") == NULL)                                    // Поиск необходимых заголовков.
         return false;
     if(response->content != NULL)
         if(findHeader(response->headers, "Content-Type") == NULL)
@@ -599,58 +692,70 @@ static bool checkHttpResponse(HTTP_RESPONSE* response) {
 
     return true;
 }
+
+// Получение HTTP запроса.
 HTTP_REQUEST* getHttpRequest(int sfd) {
 
-    char *httpRequestString = (char *) malloc(512);
+    pthread_self() == thread1 ? sPush(&checkStack1, "getHttpRequest") : sPush(&checkStack2, "getHttpRequest");
 
-    struct timeval timeout;
+    char *httpRequestString = (char*)malloc(256);
+
+    struct timeval timeout;                                                                                      // Структура для ожидания получения запроса.
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
 
-    fd_set readfds;
+    fd_set readfds;                                                                                              // Набор дескрипторов для select.
     FD_ZERO(&readfds);
     FD_SET(sfd, &readfds);
 
-    int ready = select(sfd + 1, &readfds, NULL, NULL, &timeout);
-    if(ready <= 0) {
-        printf("Error while receiving request.\n");
-        exit(0);
-    }
+    int ready = select(sfd + 1, &readfds, NULL, NULL, &timeout);                           // Ожидание, когда дескриптор будет готов принять запрос.
+    if(ready <= 0)
+        return (HTTP_REQUEST*)handleError("error while wait for server request.", true, NULL, 5, NULL, 0, NULL);
 
-    if (recv(sfd, httpRequestString, 512, 0) <= 0) {
-        HTTP_RESPONSE* response = responseInit();
-        copyString(&response->responseStatus, HTTP_STATUS_500);
-        addHttpResponseHeader(&response, initHeaders(1, "Content-Length: 0"));
+    if (recv(sfd, httpRequestString, 256, 0) <= 0) {                                            // Получение запроса.
+        HTTP_RESPONSE* response = responseInitWithParams(HTTP_STATUS_500, initHeaders(1, (const char*[]){"Content-Length: 0"}), NULL);
+
         char* httpResponseString = convertHttpResponseToString(response);
 
-        if (send(sfd, httpResponseString, stringLength(httpResponseString), 0) <= 0) {
-            printf("Error while send response.\n");
+        if (send(sfd, httpResponseString, stringLength(httpResponseString), 0) <= 0) {   // Обработка ситуации при ошибке.
+
             free(httpResponseString);
             responseFree(&response);
-            exit(0);
+            return (HTTP_REQUEST*)handleError("error while send message to client about error while receive.", true, NULL, 5, NULL, 0, NULL);
         }
+
         free(httpResponseString);
         responseFree(&response);
     }
 
-    return convertHttpRequestToObject(httpRequestString);
+    HTTP_REQUEST* request = convertHttpRequestToObject(httpRequestString);
+    free(httpRequestString);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return request;
 }
-void sendHttpResponse(int sfd, HTTP_RESPONSE** response) {
 
-    checkDoublePointer((void**)response, "sendHttpResponse", "response");
+// Послать HTTP ответ клиенту.
+bool sendHttpResponse(int sfd, HTTP_RESPONSE** response) {
 
-    if ((*response)->content == NULL)
-        addHttpResponseHeader(response, initHeaders(1, "Content-Length: 0"));
+    pthread_self() == thread1 ? sPush(&checkStack1, "sendHttpResponse") : sPush(&checkStack2, "sendHttpResponse");
 
-    if (!checkHttpResponse(*response)) {
-        printf("Not enough data in response.\n");
-        exit(0);
-    }
+    if(checkDoublePointer((const void**)response) == false)
+        return *(bool*)handleError("response is NULL.", true, NULL, 1, NULL, 0, NULL);
 
-    char *httpResponseString = convertHttpResponseToString(*response);
+    if ((*response)->content == NULL && ((*response)->headers == NULL || findHeader((*response)->headers, "Content-Length") == NULL))                                                                       // Добавление не хватающего заголовка.
+        addHttpResponseHeader(response, initHeaders(1, (const char*[]){"Content-Length: 0"}));
 
-    if (send(sfd, httpResponseString, stringLength(httpResponseString), 0) <= 0) {
-        printf("Error while send response.\n");
-        exit(0);
-    }
+    if (checkHttpResponse(*response) == false)
+        return *(bool*)handleError("not enough data in response.", true, NULL, 1, NULL, 0, NULL);
+
+    char *httpResponseString = convertHttpResponseToString(*response);                                        // Преобразовать ответ в строку.
+
+    if (send(sfd, httpResponseString, stringLength(httpResponseString), 0) <= 0)        // Отправить ответ.
+        return *(bool*)handleError("error while send http response.", true, NULL, 1, NULL, 0, NULL);
+
+    free(httpResponseString);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }

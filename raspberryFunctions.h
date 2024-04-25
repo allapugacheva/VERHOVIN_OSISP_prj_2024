@@ -3,24 +3,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include "stringFunctions.h"
+#include "checkingFunctions.h"
 #include <time.h>
 
-#define DHTPIN 7
-#define RELAYPIN 13
-#define MICROPIN 11
-int dht11_dat[5] = {0, 0, 0, 0, 0};
-//int olddht11_dat[5] = {0, 0, 0, 0, 0};
+// Библиотека для чтения данных с датчиков одноплатного компьютера.
 
-int maxcycles = 1000;
+#define DHTPIN 4                          // Номер GPIO для датчика температуры и влажности.
+#define MICROPIN 17                       // Номер GPIO для микрофона.
 
-typedef struct raspberry_sensors {
+typedef struct raspberry_sensors {        // Данные с одноплатного компьютера.
 
-    char* dateTime;
-    double temperature;
-    double humidity;
-    bool hasLoud;
+    char* dateTime;                       // Текущая дата и время.
+    double temperature;                   // Температура.
+    double humidity;                      // Влажность.
+    bool hasLoud;                         // Наличие звука.
 } RASPBERRY_SENSORS;
 
-RASPBERRY_SENSORS* readData();
+RASPBERRY_SENSORS* readData();            // Функция чтения данных с датчиков.
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+static uint8_t parsePulse(int level);                                   // Чтение бита данных с датчика температуры и влажности.
+static bool readDht11Data(double* temperature, double* humidity);      // Чтение данных с датчика температуры и влажности.

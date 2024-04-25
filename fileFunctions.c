@@ -1,210 +1,271 @@
 #include "fileFunctions.h"
 
-FILE* openFile(const char* fileName, const char* mode) {
+// Проверка, что файл пуст.
+static bool ifFileEmpty(FILE* f) {
 
-    FILE* f = fopen(fileName, mode);
-    if(f == NULL) {
-        printf("Error while open file %s.\n", fileName);
-        exit(0);
-    }
+    long currentPos = ftell(f);                                                         // Текущая позиция.
 
-    return f;
-}
+    fseek(f, 0, SEEK_END);                                                  // Переместиться в конец.
+    bool result = ftell(f) == currentPos;                                               // Сравнить положение.
 
-bool ifFileEmpty(FILE* f) {
-
-    long currentPos = ftell(f);
-
-    fseek(f, 0, SEEK_END);
-    bool result = ftell(f) == currentPos;
-
-    fseek(f, currentPos, SEEK_SET);
+    fseek(f, currentPos, SEEK_SET);                                         // Вернуться назад.
 
     return result;
 }
 
-void addStringToFile(const char* fileName, const char* data) {
+// Добавление строки в файл.
+bool addStringToFile(const char* fileName, const char* data) {
 
-    FILE* f = openFile(fileName, "a+");
+    pthread_self() == thread1 ? sPush(&checkStack1, "addStringToFile") : sPush(&checkStack2, "addStringToFile");
 
-    if(ifFileEmpty(f))
+    FILE* f = fopen(fileName, "a+");
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
+
+    fseek(f, 0, SEEK_END);
+
+    if(ftell(f) == 0L)                                                                // Форматирование строки в зависимости от содержимого файла.
         fprintf(f, "%s", data);
     else
         fprintf(f, "\n%s", data);
 
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-void showContent(const char* fileName) {
+// Вывод содержимого файла.
+bool showContent(const char* fileName) {
 
-    FILE* f = openFile(fileName, "r");
+    pthread_self() == thread1 ? sPush(&checkStack1, "showContent") : sPush(&checkStack2, "showContent");
 
-    struct flock fl;
-    fl.l_type = F_RDLCK;
+    FILE* f = fopen(fileName, "r");
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
+
+    struct flock fl;                                                                          // Структура для обеспечения конкурентного доступа к файлу.
+    fl.l_type = F_RDLCK;                                                                      // Блокировка на чтение.
     fl.l_len = 0;
-    fl.l_start = 0;
+    fl.l_start = 0;                                                                           // Блокировать весь файл.
     fl.l_whence = SEEK_SET;
-    if(fcntl(fileno(f), F_SETLKW, &fl) == -1) {
-        printf("Error while making block.\n");
-        fclose(f);
-        exit(0);
-    }
+    if(fcntl(fileno(f), F_SETLKW, &fl) == -1)                                  // Установка блокировки файла.
+        return *(bool*)handleError("error while make block.", true, NULL, 1, f, 0, NULL);
 
-    if(ifFileEmpty(f))
+    if(ifFileEmpty(f) == true)
         printf("No data.\n");
     else {
-        while (!feof(f)) {
-            char *temp = (char *) malloc(256);
+        while (true) {                                    // Вывод содержимого.
 
-            fgets(temp, 256, f);
-            temp[stringLength(temp) - 1] = '\0';
+            char* temp = (char*)malloc(256);
 
-            printJsonStructured(parseStringToJson(temp));
+            if(fgets(temp, 256, f) == NULL) {
+                free(temp);
+                break;
+            }
 
+            if(!feof(f))
+                temp[stringLength(temp) - 1] = '\0';
+
+            JSON_NODE* tempJson = parseStringToJson(temp);                              // Преобразование строки в объект JSON.
+
+            if(IS_JSON_ERROR(*tempJson)) {
+
+                fl.l_type = F_UNLCK;                                                          // Разблокировка.
+                if(fcntl(fileno(f), F_SETLKW, &fl) == -1)
+                    return *(bool*)handleError("error while make unblock.", true, NULL, 1, f, 0, NULL);
+
+                return *(bool*)handleError("wrong string format.", true, NULL, 1, f, 0, NULL);
+            }
+
+            printJsonStructured(tempJson);
+
+            removeJson(&tempJson);
             free(temp);
         }
     }
 
-    fl.l_type = F_UNLCK;
-    if(fcntl(fileno(f), F_SETLKW, &fl) == -1) {
-        printf("Error while breaking block.\n");
-        fclose(f);
-        exit(0);
-    }
+    fl.l_type = F_UNLCK;                                                                     // Разблокировка.
+    if(fcntl(fileno(f), F_SETLKW, &fl) == -1)
+        return *(bool*)handleError("error while make unblock.", true, NULL, 1, f, 0, NULL);
 
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
+// Сравнение двух строк по указанному полю JSON объекта.
 static int compareByField(const char* str1, const char* str2, const char* fieldName) {
 
-    int i = findSubstring(str1, fieldName), j = findSubstring(str2, fieldName);
-    while(str1[i++] != '"');
-    i+=2;
-    while(str2[j++] != '"');
-    j+=2;
+    int i = findSubstring(str1, fieldName), j = findSubstring(str2, fieldName);    // Поиск нужных полей.
+    if(i == -1 || j == -1)
+        return 0;
 
-    return compareString(copyStringFromIToSymbol(str1, &i, '"'), copyStringFromIToSymbol(str2, &j, '"'));
+    while(str1[i++] != '"');
+    i+=1;
+    while(str2[j++] != '"');
+    j+=1;
+                                                                                                               // Получение нужных полей.
+    char* data1 = copyStringFromIToSymbol(str1, &i, ','), *data2 = copyStringFromIToSymbol(str2, &j, ',');
+    int result = compareString(data1, data2);                                                        // Сравнение полей.
+
+    free(data1);
+    free(data2);
+
+    return result;
 }
 
+// Быстрая сортировка массива строк.
 static void quicksort(char*** arr, int left, int right, const char* fieldName) {
 
-    if (left < right) {
-        int middleIndex = (left + right) / 2;
+    if(left < right) {
+        int middleIndex = (left + right) / 2;                                            // Средний элемент.
         char *middle = (*arr)[middleIndex];
-        int i = left;
+        int i = left;                                                                    // Индексы для обхода.
         int j = right;
 
         while (i <= j) {
-            while (compareByField((*arr)[i], middle, fieldName) < 0)
+            while (compareByField((*arr)[i], middle, fieldName) < 0)           // Поиск первого в левой половине, кто стоит не так.
                 i++;
-            while (compareByField((*arr)[j], middle, fieldName) > 0)
+            while (compareByField((*arr)[j], middle, fieldName) > 0)           // Поиск первого в правой половине, кто стоит не так.
                 j--;
             if (i <= j) {
-                char *temp;
-                copyString(&temp, (*arr)[i]);
-                copyString(&(*arr)[i], (*arr)[j]);
-                copyString(&(*arr)[j], temp);
-                free(temp);
+                char *temp = (*arr)[i];                                                 // Замена местами.
+                (*arr)[i] = (*arr)[j];
+                (*arr)[j] = temp;
                 i++;
                 j--;
             }
         }
 
-        quicksort(arr, left, j, fieldName);
-        quicksort(arr, i, right, fieldName);
+        quicksort(arr, left, j, fieldName);                                        // Вызов для левой половины.
+        quicksort(arr, i, right, fieldName);                                        // Вызов для правой половины.
     }
 }
 
-void sortContent(const char* fileName, const char* field) {
+// Сортировка данных в файле.
+bool sortContent(const char* fileName, const char* field) {
 
-    FILE* f = openFile(fileName, "r+");
+    pthread_self() == thread1 ? sPush(&checkStack1, "sortContent") : sPush(&checkStack2, "sortContent");
 
-    struct flock fl;
-    fl.l_type = F_WRLCK;
+    FILE* f = fopen(fileName, "r+");
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
+
+    struct flock fl;                                                                    // Структура для конкурентного доступа к файлу.
+    fl.l_type = F_WRLCK;                                                                // Блокировка на запись.
     fl.l_len = 0;
-    fl.l_start = 0;
+    fl.l_start = 0;                                                                     // Всего файла.
     fl.l_whence = SEEK_SET;
-    if(fcntl(fileno(f), F_SETLKW, &fl) == -1) {
-        printf("Error while making block.\n");
-        fclose(f);
-        exit(0);
+    if(fcntl(fileno(f), F_SETLKW, &fl) == -1)                           // Установка блокировки.
+        return *(bool*)handleError("error while make block.", true, NULL, 1, f, 0, NULL);
+
+    int realCount = 0, maxCount = 20;
+
+    char** strings = (char**)malloc(maxCount*sizeof(char*));
+
+    while(true) {
+
+        if(realCount == maxCount) {
+            maxCount *= 2;
+            strings = (char**)realloc(strings, maxCount*sizeof(char*));
+        }
+
+        strings[realCount] = (char*)malloc(256);
+        if(fgets(strings[realCount], 256, f) == NULL)                     // Чтение всех строк.
+            break;
+        if(!feof(f))
+            strings[realCount][stringLength(strings[realCount]) - 1] = '\0';
+        realCount++;
     }
 
-    int count = 1;
-    while(!feof(f)) {
+    quicksort(&strings, 0, realCount - 1, field);              // Сортировка строк.
 
-        while(fgetc(f) != '\n');
-        count++;
-    }
     fseek(f, 0, SEEK_SET);
 
-    char** strings = (char**)malloc(count * sizeof(char*));
-
-    for(int i = 0; i<count; i++) {
-
-        strings[i] = (char*)malloc(256);
-        fgets(strings[i], 256, f);
+    for(int i = 0; i<realCount; i++) {                                                // Запись в файл.
+        if(i + 1 != realCount)
+            fprintf(f, "%s\n", strings[i]);
+        else
+            fprintf(f, "%s", strings[i]);
     }
 
-    quicksort(&strings, 0, count - 1, field);
-
-    fseek(f, 0, SEEK_SET);
-
-    for(int i = 0; i<count; i++)
-        fputs(strings[i], f);
-
-    for(int i = 0; i<count; i++)
+    for(int i = 0; i<realCount; i++)
         free(strings[i]);
     free(strings);
 
     fl.l_type = F_UNLCK;
-    if(fcntl(fileno(f), F_SETLKW, &fl) == -1) {
-        printf("Error while breaking block.\n");
-        fclose(f);
-        exit(0);
-    }
+    if(fcntl(fileno(f), F_SETLKW, &fl) == -1)                        // Разблокировка файла.
+        return *(bool*)handleError("error while make unblock.", true, NULL, 1, f, 0, NULL);
 
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-void clearFile(const char* fileName) {
+// Очистка файла.
+bool clearFile(const char* fileName) {
 
-    FILE* f = openFile(fileName, "w");
+    pthread_self() == thread1 ? sPush(&checkStack1, "clearFile") : sPush(&checkStack2, "clearFile");
+
+    FILE* f = fopen(fileName, "w");                                          // Открыть файл с модификатором доступа создания нового.
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
+
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-void readToQueue(NODE** queue, const char* fileName) {
+// Запись данных из файла в очередь.
+bool readToQueue(QNODE** queue, const char* fileName) {
 
-    FILE* f = openFile(fileName, "r");
+    pthread_self() == thread1 ? sPush(&checkStack1, "readToQueue") : sPush(&checkStack2, "readToQueue");
 
-    if(!ifFileEmpty(f)) {
-        while (!feof(f)) {
+    FILE* f = fopen(fileName, "r");
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
 
-            char *temp = (char *) malloc(256);
-            fgets(temp, 256, f);
-            temp[stringLength(temp) - 1] = '\0';
+    if(ifFileEmpty(f) != true) {
+        while (true) {
 
-            push(queue, temp);
+            char *temp = (char *)malloc(256);
+            if(fgets(temp, 256, f) == NULL) {                                      // Чтение всех строк.
+                free(temp);
+                break;
+            }
+            if(!feof(f))
+                temp[stringLength(temp) - 1] = '\0';
+
+            qPush(queue, temp);                                               // Запись в очередь.
             free(temp);
         }
     }
 
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-void writeFromQueue(NODE* queue, const char* fileName) {
+// Запись данных из очереди в файл.
+bool writeFromQueue(QNODE* queue, const char* fileName) {
 
-    FILE* f = openFile(fileName, "w");
+    pthread_self() == thread1 ? sPush(&checkStack1, "writeFromQueue") : sPush(&checkStack2, "writeFromQueue");
+
+    FILE* f = fopen(fileName, "w");
+    if(f == NULL)
+        return *(bool*)handleError("error while open file.", true, NULL, 1, f, 0, NULL);
 
     while(queue != NULL) {
 
-        if(queue->next != NULL)
+        if(queue->next != NULL)                                                  // Запись всех данных в файл.
             fprintf(f, "%s\n", queue->data);
         else
             fprintf(f, "%s", queue->data);
 
-        pop(&queue);
+        qPop(&queue);
     }
 
     fclose(f);
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }

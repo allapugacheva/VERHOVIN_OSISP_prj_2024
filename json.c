@@ -1,5 +1,6 @@
 #include "json.h"
 
+// Инициализация указателей объекта JSON пустыми указателями.
 static void makeNullFields(JSON_NODE** node) {
 
     (*node)->current = NULL;
@@ -9,15 +10,28 @@ static void makeNullFields(JSON_NODE** node) {
     (*node)->stringVal = NULL;
 }
 
+// Очистка указателей объекта JSON.
 static void freeNodePointers(JSON_NODE** jsonNode) {
 
     if((*jsonNode)->type == string)
         free((*jsonNode)->stringVal);
 
     if((*jsonNode)->type == array || (*jsonNode)->type == object)
-        removeJson(&(*jsonNode)->current);
+        removeJson(&(*jsonNode)->current);                                    // Удаление всех связанных узлов массива или объекта.
 }
 
+// Изменение имени поля узла объекта JSON.
+static void changeFieldName(JSON_NODE** jsonNode, const char* fieldName) {
+
+    if(fieldName != NULL) {
+
+        if((*jsonNode)->objectFieldName != NULL)
+            free((*jsonNode)->objectFieldName);
+        copyString(&(*jsonNode)->objectFieldName, fieldName);
+    }
+}
+
+// Создание пустого объекта JSON.
 JSON_NODE* createJsonNode() {
 
     JSON_NODE* newNode = JSON_MALLOC(1);
@@ -27,20 +41,35 @@ JSON_NODE* createJsonNode() {
 
     return newNode;
 }
+
+// Создание объекта JSON с логической переменной.
 JSON_NODE* createBoolJsonNode(bool boolValue, const char* fieldName) {
 
-    JSON_NODE* newNode = JSON_MALLOC(1);
-    makeNullFields(&newNode);
+    pthread_self() == thread1 ? sPush(&checkStack1, "createBoolJsonNode") : sPush(&checkStack2, "createBoolJsonNode");
 
-    newNode->boolVal = boolValue;
+    if(fieldName == NULL)
+        return (JSON_NODE*)handleError("fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
+
+    JSON_NODE* newNode = JSON_MALLOC(1);                                            // Выделение места под объект JSON.
+    makeNullFields(&newNode);                                                 // Инициализация указателей значениями NULL.
+
+    newNode->boolVal = boolValue;                                                   // Указание типа и значения.
     newNode->type = boolean;
 
-    if(fieldName != NULL)
+    if(fieldName[0] != '\0')                                                        // Указание имени поля, если задано.
         copyString(&newNode->objectFieldName, fieldName);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return newNode;
 }
+
+// Создание объекта JSON с числом.
 JSON_NODE* createNumberJsonNode(double numberValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "createNumberJsonNode") : sPush(&checkStack2, "createNumberJsonNode");
+
+    if(fieldName == NULL)
+        return (JSON_NODE*)handleError("fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* newNode = JSON_MALLOC(1);
     makeNullFields(&newNode);
@@ -48,29 +77,40 @@ JSON_NODE* createNumberJsonNode(double numberValue, const char* fieldName) {
     newNode->numberVal = numberValue;
     newNode->type = number;
 
-    if(fieldName != NULL)
+    if(fieldName[0] != '\0')
         copyString(&newNode->objectFieldName, fieldName);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return newNode;
 }
+
+// Создание объекта JSON со строкой.
 JSON_NODE* createStringJsonNode(const char* stringValue, const char* fieldName) {
 
-    checkPointer(stringValue, "createStringJsonNode", "stringValue");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createStringJsonNode") : sPush(&checkStack2, "createStringJsonNode");
+
+    if(stringValue == NULL || fieldName == NULL)
+        return (JSON_NODE*)handleError("stringValue or fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* newNode = JSON_MALLOC(1);
     makeNullFields(&newNode);
-
     copyString(&(newNode->stringVal), stringValue);
     newNode->type = string;
 
-    if(fieldName != NULL)
+    if(fieldName[0] != '\0')
         copyString(&newNode->objectFieldName, fieldName);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return newNode;
 }
+
+// Создание объекта JSON с объектом.
 JSON_NODE* createObjectJsonNode(JSON_NODE* objectValue, const char* fieldName) {
 
-    checkPointer(objectValue, "createObjectJsonNode", "objectValue");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createObjectJsonNode") : sPush(&checkStack2, "createObjectJsonNode");
+
+    if(objectValue == NULL || fieldName == NULL)
+        return (JSON_NODE*)handleError("objectValue or fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* newNode = JSON_MALLOC(1);
     makeNullFields(&newNode);
@@ -78,14 +118,20 @@ JSON_NODE* createObjectJsonNode(JSON_NODE* objectValue, const char* fieldName) {
     newNode->current = objectValue;
     newNode->type = object;
 
-    if(fieldName != NULL)
+    if(fieldName[0] != '\0')
         copyString(&newNode->objectFieldName, fieldName);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return newNode;
 }
+
+// Создание объекта JSON c массивом.
 JSON_NODE* createArrayJsonNode(JSON_NODE* arrayValue, const char* fieldName) {
 
-    checkPointer(arrayValue, "createArrayJsonNode", "arrayValue");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createArrayJsonNode") : sPush(&checkStack2, "createArrayJsonNode");
+
+    if(arrayValue == NULL || fieldName == NULL)
+        return (JSON_NODE*)handleError("arrayValue or fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* newNode = JSON_MALLOC(1);
     makeNullFields(&newNode);
@@ -93,30 +139,38 @@ JSON_NODE* createArrayJsonNode(JSON_NODE* arrayValue, const char* fieldName) {
     newNode->current = arrayValue;
     newNode->type = array;
 
-    if(fieldName != NULL)
+    if(fieldName[0] != '\0')
         copyString(&newNode->objectFieldName, fieldName);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return newNode;
 }
 
-void removeJsonNode(JSON_NODE** jsonNode) {  // free
+// Удаление указанного узла из объекта JSON.
+bool removeJsonNode(JSON_NODE** jsonNode) {
 
-    checkDoublePointer((void**)jsonNode, "removeJsonNode", "jsonNode");
+    pthread_self() == thread1 ? sPush(&checkStack1, "removeJsonNode") : sPush(&checkStack2, "removeJsonNode");
+
+    if(checkDoublePointer((const void**)jsonNode) == false)
+        return *(bool*)handleError("jsonNode is NULL.", true, NULL, 1, NULL, 0, NULL);
 
     bool moveHead = false;
 
-    if((*jsonNode)->next != NULL)
+    if((*jsonNode)->next != NULL)                           // Отсоединение указателей на следующий и предыдущий элементы.
         (*jsonNode)->next->prev = (*jsonNode)->prev;
     if((*jsonNode)->prev != NULL)
         (*jsonNode)->prev->next = (*jsonNode)->next;
     else 
         moveHead = true;
 
-    freeNodePointers(jsonNode);
+    freeNodePointers(jsonNode);                             // Освобождение указателей.
 
-    if(moveHead) {
+    if((*jsonNode)->objectFieldName != NULL)
+        free((*jsonNode)->objectFieldName);
 
-        JSON_NODE* temp = *jsonNode;
+    if(moveHead == true) {
+
+        JSON_NODE* temp = *jsonNode;                        // Очистка элемента и сдвиг указателя на первый элемент.
         *jsonNode = (*jsonNode)->next;
 
         free(temp);
@@ -125,216 +179,364 @@ void removeJsonNode(JSON_NODE** jsonNode) {  // free
         free(*jsonNode);
         *jsonNode = NULL;
     }
-}
-void removeJson(JSON_NODE** json) {
 
-    checkDoublePointer((void**)json, "removeJson", "json");
-
-    while (*json != NULL)
-        removeJsonNode(json);
-
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
+// Удаление всего объекта JSON.
+bool removeJson(JSON_NODE** json) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "removeJson") : sPush(&checkStack2, "removeJson");
+
+    if(json == NULL)
+        return *(bool*)handleError("json is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    while (removeJsonNode(json) == true);          // Очистка каждого узла.
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Связь двух узлов объекта JSON.
 static void connectNode(JSON_NODE** jsonNode, JSON_NODE** prevNode, JSON_NODE** nextNode) {
 
-    if(nextNode != NULL)
+    if(nextNode != NULL)                                    // Установка указателя на следующий.
         (*jsonNode)->next = *nextNode;
     else
         (*jsonNode)->next = NULL;
-    if(nextNode != NULL && *nextNode != NULL)
+    if(nextNode != NULL && *nextNode != NULL)               // Связь с предыдущим.
         (*nextNode)->prev = *jsonNode;
 
-    if(prevNode != NULL)
+    if(prevNode != NULL)                                    // Установка указателя на предыдущий.
         (*jsonNode)->prev = *prevNode;
     else
         (*jsonNode)->prev = NULL;
-    if(prevNode != NULL && *prevNode != NULL)
+    if(prevNode != NULL && *prevNode != NULL)               // Связь со следующим.
         (*prevNode)->next = *jsonNode;
 }
 
+// Количество узлов в объекте JSON.
 static int jsonLength(JSON_NODE* json) {
 
-    int length = 0;
+    int length = 0;                                         // Обход всех узлов.
     for(JSON_NODE* temp = json; temp != NULL; temp = temp->next, length++);
 
     return length;
 }
 
+// Удаление узла на указанной позиции.
+bool removeNJsonNode(JSON_NODE** json, int n) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "removeNJsonNode") : sPush(&checkStack2, "removeNJsonNode");
+
+    if(json == NULL)
+        return *(bool*) handleError("json is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    JSON_NODE *temp = goToNJsonNode(*json, n);              // Переход к узлу.
+    if(temp != NULL && IS_JSON_ERROR(*temp))
+        return *(bool*) handleError("temp is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    int result = removeJsonNode(&temp);            // Удаление.
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return result;
+}
+
+// Удаление узла по указанному полю.
+bool removeJsonNodeByField(JSON_NODE** json, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "removeJsonNodeByField") : sPush(&checkStack2, "removeJsonNodeByField");
+
+    if(json == NULL)
+        return *(bool*) handleError("json is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    JSON_NODE* temp = goToJsonNodeByField(*json, fieldName); // Переход к узлу.
+    if(temp != NULL && IS_JSON_ERROR(*temp))
+        return *(bool*) handleError("temp is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    int result = removeJsonNode(&temp);           // Удаление.
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return result;
+}
+
+// Проверка, что в объекте JSON есть указанное поле.
+bool hasJsonField(JSON_NODE* json, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "hasJsonField") : sPush(&checkStack2, "hasJsonField");
+
+    if(json == NULL || fieldName == NULL)
+        return *(bool*) handleError("json or fieldName is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    JSON_NODE* temp = json;
+    while(temp != NULL) {                                 // Обход всех узлов.
+                                                          // Сравнение.
+        if (compareString(temp->objectFieldName, fieldName) == 0) {
+
+            pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+            return true;
+        }
+        temp = temp->next;
+    }
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return false;
+}
+
+// Переход к указанному полю.
+JSON_NODE* goToJsonNodeByField(JSON_NODE* json, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "goToJsonNodeByField") : sPush(&checkStack2, "goToJsonNodeByField");
+
+    if(json == NULL || fieldName == NULL)
+        return (JSON_NODE*)handleError("json or fieldName is NULL.", true, NULL, 2, NULL, 0, NULL);
+
+    JSON_NODE* temp = json;                                  // Обход всех узлов и сравнение в каждом названии полей.
+    for(;temp != NULL && compareString(temp->objectFieldName, fieldName) != 0; temp = temp->next);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return temp;
+}
+
+// Переход к указанному по счёту узлу.
 JSON_NODE* goToNJsonNode(JSON_NODE* json, int n) {
 
-    checkPointer(json, "goToNJsonNode", "json");
-    checkNumber(n, -1, jsonLength(json), "goToNJsonNode");
+    pthread_self() == thread1 ? sPush(&checkStack1, "goToNJsonNode") : sPush(&checkStack2, "goToNJsonNode");
+
+    if(json == NULL || checkNumber(n, -1, jsonLength(json)) == false)
+        return (JSON_NODE*)handleError("json is NULL or n has wrong value.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* temp = json;
 
     int count = 1;
-    while(temp->next != NULL && count++ != n)
+    while(temp->next != NULL && count++ != n)                 // Переход к указанному по счёту полю.
         temp = temp->next;
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return temp;
 }
 
-// to array, object also
-void addToJsonToNPos(JSON_NODE** json, JSON_NODE* node, int position) {
+// Добавление узла на указанную позицию.
+bool addToJsonToNPos(JSON_NODE** json, JSON_NODE* node, int position) {
 
-    if (json != NULL) {
+    pthread_self() == thread1 ? sPush(&checkStack1, "addToJsonToNPos") : sPush(&checkStack2, "addToJsonToNPos");
 
-        checkPointer(node, "addToJsonToNPos", "node");
+    if (json == NULL || node == NULL || checkNumber(position, -1, *json != NULL ? jsonLength(*json) : 2) == false)
+        return *(bool*) handleError("json or node is NULL or position has wrong value.", true, NULL, 1, NULL, 0, NULL);
 
-        if (position < -1 || (*json != NULL && position > jsonLength(*json)) || (*json == NULL && position > 1)) {
-            printf("Error in 'addToJsonToNPos' - wrong position\n");
-            exit(0);
-        }
+    if (*json == NULL)                                        // Если объект пуст - в голову.
+        *json = node;
+    else {
+        JSON_NODE *nNode = goToNJsonNode(*json, position); // Переход на нужное место.
 
-        if (*json == NULL)
-            *json = node;
-        else {
-            JSON_NODE *nNode = goToNJsonNode(*json, position);
+        if (position == -1)                                   // Установка соединений.
+            connectNode(&node, &nNode, NULL);            // В конец.
+        else
+            connectNode(&node, &nNode->prev, &nNode);    // Не в конец.
 
-            if (position == -1)
-                connectNode(&node, &nNode, NULL);
-            else
-                connectNode(&node, &nNode->prev, &nNode);
-
-            if (position == 1)
-                *json = (*json)->prev;
-        }
-    } else {
-        printf("Error in 'addToJsonToNPos' - NULL json\n");
-        exit(0);
+        if (position == 1)
+            *json = (*json)->prev;                            // Сдвиг головы при добавлении в начало.
     }
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
-void updateJsonNodeToBool(JSON_NODE** jsonNode, bool boolValue) {
+// Обновление значения названия поля объекта JSON.
+bool updateJsonNodeFieldName(JSON_NODE** jsonNode, const char* fieldName) {
 
-    checkDoublePointer((void**)jsonNode, "updateJsonNodeToBool", "jsonNode");
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeFieldName") : sPush(&checkStack2, "updateJsonNodeFieldName");
+
+    if(checkDoublePointer((const void**)jsonNode) == false || fieldName == NULL)
+        return *(bool*)handleError("jsonNode or fieldName is NULL.", true, NULL, 1, NULL, 0, NULL);
+
+    changeFieldName(jsonNode, fieldName);                    // Обновление названия поля.
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Обновление значения поля на логическую переменную.
+bool updateJsonNodeToBool(JSON_NODE** jsonNode, bool boolValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeToBool") : sPush(&checkStack2, "updateJsonNodeToBool");
+
+    if(checkDoublePointer((const void**)jsonNode) == false)
+        return *(bool*) handleError("jsonNode is NULL.", true, NULL, 1, NULL, 0, NULL);
+
     freeNodePointers(jsonNode);
 
-    (*jsonNode)->type = boolean;
+    (*jsonNode)->type = boolean;                             // Установка новых значений и типа и названия, если последнее задано.
     (*jsonNode)->boolVal = boolValue;
-}
-void updateJsonNodeToNumber(JSON_NODE** jsonNode, double numberValue) {
+    changeFieldName(jsonNode, fieldName);
 
-    checkDoublePointer((void**)jsonNode, "updateJsonNodeToNumber", "jsonNode");
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Обновление значения поля число.
+bool updateJsonNodeToNumber(JSON_NODE** jsonNode, double numberValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeToNumber") : sPush(&checkStack2, "updateJsonNodeToNumber");
+
+    if(checkDoublePointer((const void**)jsonNode) == false)
+        return *(bool*) handleError("jsonNode is NULL.", true, NULL, 1, NULL, 0, NULL);
+
     freeNodePointers(jsonNode);
 
     (*jsonNode)->type = number;
     (*jsonNode)->numberVal = numberValue;
-    
-}
-void updateJsonNodeToString(JSON_NODE** jsonNode, const char* stringValue) {
+    changeFieldName(jsonNode, fieldName);
 
-    checkDoublePointer((void**)jsonNode, "updateJsonNodeToString", "jsonNode");
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Обновление значения поля на строку.
+bool updateJsonNodeToString(JSON_NODE** jsonNode, const char* stringValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeToString") : sPush(&checkStack2, "updateJsonNodeToString");
+
+    if(checkDoublePointer((const void**)jsonNode) == false || stringValue == NULL)
+        return *(bool*) handleError("jsonNode or stringValue is NULL.", true, NULL, 1, NULL, 0, NULL);
+
     freeNodePointers(jsonNode);
 
     (*jsonNode)->type = string;
     copyString(&(*jsonNode)->stringVal, stringValue);
-}
-void updateJsonNodeToObject(JSON_NODE** jsonNode, JSON_NODE* objectValue) {
+    changeFieldName(jsonNode, fieldName);
 
-    checkDoublePointer((void**)jsonNode, "updateJsonNodeToObject", "jsonNode");
-    checkPointer(objectValue, "updateJsonNodeToObject", "objectValue");
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Обновление значения поля на объект.
+bool updateJsonNodeToObject(JSON_NODE** jsonNode, JSON_NODE* objectValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeToObject") : sPush(&checkStack2, "updateJsonNodeToObject");
+
+    if(checkDoublePointer((const void**)jsonNode) == false || objectValue == NULL)
+        return *(bool*) handleError("jsonNode or objectValue is NULL.", true, NULL, 1, NULL, 0, NULL);
+
     freeNodePointers(jsonNode);
 
     (*jsonNode)->type = object;
     (*jsonNode)->current = objectValue;
-}
-void updateJsonNodeToArray(JSON_NODE** jsonNode, JSON_NODE* arrayValue) {
+    changeFieldName(jsonNode, fieldName);
 
-    checkDoublePointer((void**)jsonNode, "updateJsonNodeToArray", "jsonNode");
-    checkPointer(arrayValue, "updateJsonNodeToArray", "arrayValue");
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
+}
+
+// Обновление значения поля на массив.
+bool updateJsonNodeToArray(JSON_NODE** jsonNode, JSON_NODE* arrayValue, const char* fieldName) {
+
+    pthread_self() == thread1 ? sPush(&checkStack1, "updateJsonNodeToArray") : sPush(&checkStack2, "updateJsonNodeToArray");
+
+    if(checkDoublePointer((const void**)jsonNode) == false || arrayValue == NULL)
+        return *(bool*) handleError("jsonNode or arrayValue is NULL.", true, NULL, 1, NULL, 0, NULL);
+
     freeNodePointers(jsonNode);
 
     (*jsonNode)->type = array;
     (*jsonNode)->current = arrayValue;
+    changeFieldName(jsonNode, fieldName);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
+    return true;
 }
 
+// Создание массива логических переменных.
 JSON_NODE* createBoolArray(const bool* boolArray, int size) {
 
-    checkPointer(boolArray, "createBoolArray", "boolArray");
-    checkNumber(size, 1, -1, "createBoolArray");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createBoolArray") : sPush(&checkStack2, "createBoolArray");
 
-    JSON_NODE* first = NULL;
-    for(int i = 0; i<size; i++)
-        addToJsonToNPos(&first, createBoolJsonNode(boolArray[i], NULL), -1);
+    if(boolArray == NULL || checkNumber(size, 1, -1) == false)
+        return (JSON_NODE*)handleError("boolArray is NULL or size has wrong value.", true, NULL, 2, NULL, 0, NULL);
 
+    JSON_NODE* first = NULL;                                          // Пустой объект массива.
+    for(int i = 0; i<size; i++)                                       // Добавление в конец массива значений.
+        addToJsonToNPos(&first, createBoolJsonNode(boolArray[i], "\0"), -1);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return first;
 }
+
+// Создание массива чисел.
 JSON_NODE* createNumberArray(const double* numberArray, int size) {
 
-    checkPointer(numberArray, "createNumberArray", "numberArray");
-    checkNumber(size, 1, -1, "createNumberArray");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createNumberArray") : sPush(&checkStack2, "createNumberArray");
+
+    if(numberArray == NULL || checkNumber(size, 1, -1) == false)
+        return (JSON_NODE*)handleError("numberArray is NULL or size has wrong value.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* first = NULL;
     for(int i = 0; i<size; i++)
-        addToJsonToNPos(&first, createNumberJsonNode(numberArray[i], NULL), -1);
+        addToJsonToNPos(&first, createNumberJsonNode(numberArray[i], "\0"), -1);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return first;
 }
+
+// Создание массива строк.
 JSON_NODE* createStringArray(const char** stringArray, int size) {
 
-    checkPointer(stringArray, "createStringArray", "stringArray");
-    checkNumber(size, 1, -1, "createStringArray");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createStringArray") : sPush(&checkStack2, "createStringArray");
+
+    if(checkNumber(size, 1, -1) == false || checkArray((const void**)stringArray, size) == false)
+        return (JSON_NODE*)handleError("stringArray is NULL or size has wrong value.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* first = NULL;
     for(int i = 0; i<size; i++)
-        addToJsonToNPos(&first, createStringJsonNode(stringArray[i], NULL), -1);
+        addToJsonToNPos(&first, createStringJsonNode(stringArray[i], "\0"), -1);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return first;
 }
+
+// Создание массива объектов.
 JSON_NODE* createObjectArray(JSON_NODE* objectArray, int size) {
 
-    checkPointer(objectArray, "createObjectArray", "objectArray");
-    checkNumber(size, 1, -1, "createObjectArray");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createObjectArray") : sPush(&checkStack2, "createObjectArray");
+
+    if(objectArray == NULL || checkNumber(size, 1, -1) == false)
+        return (JSON_NODE*)handleError("objectArray is NULL or size has wrong value.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* first = NULL;
     for(int i = 0; i<size; i++)
-        addToJsonToNPos(&first, createObjectJsonNode(&objectArray[i], NULL), -1);
+        addToJsonToNPos(&first, createObjectJsonNode(&objectArray[i], "\0"), -1);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return first;
 }
-void deleteArray(JSON_NODE** array) {
 
-    removeJson(array);
+// Очистка массива.
+bool deleteArray(JSON_NODE** array) {
+
+    return removeJson(array);
 }
 
-static int arraySize(JSON_NODE* array) {
+// Добавление в массив на указанную позицию.
+bool addToArrayToNPos(JSON_NODE** array, JSON_NODE* value, int index) {
 
-    int size = 0;
-    for (JSON_NODE *temp = array; temp != NULL; temp = temp->next, size++);
-
-    return size;
+    return addToJsonToNPos(array, value, index);
 }
 
-void addToArrayToNPos(JSON_NODE** array, JSON_NODE* value, int index) {
+// Переход к элементу массива по указанному индексу.
+JSON_NODE* findInArrayByIndex(JSON_NODE* array, int index) {
 
-    addToJsonToNPos(array, value, index);
+    return goToNJsonNode(array, index);
 }
 
-JSON_NODE* findByIndex(JSON_NODE* array, int index) {
+// Удаление из массива по указанному индексу.
+bool removeFromArray(JSON_NODE** array, int index) {
 
-    checkPointer(array, "findByIndex", "array");
-    checkNumber(index, 0, arraySize(array) - 1, "findByIndex");
-
-    JSON_NODE* temp = array;
-    while(temp != NULL && index-- > 0)
-        temp = temp->next;
-
-    return temp;
+    return removeNJsonNode(array, index);
 }
 
-void removeFromArray(JSON_NODE** array, int index) {
-
-    checkDoublePointer((void**)array, "removeFromArray", "array");
-    checkNumber(index, 0, arraySize(*array), "removeFromArray");
-
-    JSON_NODE* temp = goToNJsonNode(*array, index);
-    removeJsonNode(&temp);
-}
-
+// Создание узла объекта JSON по полю.
 static JSON_NODE* createJsonNodeFromField(OBJECT_FIELD field) {
 
-    switch(field.type) {
+    switch(field.type) {                                       // Создание нужного узла в зависимости от указанного поля.
 
         case boolean:
             return createBoolJsonNode(field.value.boolVal, field.fieldName);
@@ -346,82 +548,64 @@ static JSON_NODE* createJsonNodeFromField(OBJECT_FIELD field) {
         case object:
             return createObject(field.size, field.value.current);
     }
-
-    printf("Error in 'createJsonNOdeFromField' - no available type\n");
-    exit(0);
 }
 
+// Создание объекта.
 JSON_NODE* createObject(int countFields, OBJECT_FIELD* fields) {
 
-    checkPointer(fields, "createObject", "fields");
+    pthread_self() == thread1 ? sPush(&checkStack1, "createObject") : sPush(&checkStack2, "createObject");
 
-    JSON_NODE* first = createJsonNodeFromField(fields[0]);
-    for(int i = 1; i<countFields; i++)
+    if(fields == NULL)
+        return (JSON_NODE*)handleError("fields is NULL.", true, NULL, 2, NULL, 0, NULL);
+
+    JSON_NODE* first = NULL;                                    // Пустой объект.
+    for(int i = 0; i<countFields; i++)                          // Добавление полей в объект.
         addToJsonToNPos(&first, createJsonNodeFromField(fields[i]), -1);
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return first;
 }
-void deleteObject(JSON_NODE** object) {
 
-    removeJson(object);
+// Очистка объекта.
+bool deleteObject(JSON_NODE** object) {
+
+    return removeJson(object);
 }
 
+// Проверка на наличие в объекте поля.
 bool hasObjectField(JSON_NODE* object, const char* fieldName) {
 
-    checkPointer(object, "hasObjectField", "object");
-    checkPointer(fieldName, "hasObjectField", "fieldName");
-
-    JSON_NODE* temp = object;
-    while(temp != NULL) {
-        if(compareString(temp->objectFieldName, fieldName) == 0)
-            return true;
-        temp = temp->next;
-    }
-
-    return false;
+    return hasJsonField(object, fieldName);
 }
+
+// Поиск в объекте поля.
 JSON_NODE* findByFieldName(JSON_NODE* object, const char* fieldName) {
 
-    checkPointer(object, "findByFieldName", "object");
-    checkPointer(fieldName, "findByFieldName", "fieldName");
-
-    JSON_NODE* temp = object;
-    while(temp != NULL) {
-        if(compareString(temp->objectFieldName, fieldName) == 0)
-            return temp;
-        temp = temp->next;
-    }
-
-    return NULL;
+    return goToJsonNodeByField(object, fieldName);
 }
 
-void addToObjectToNPos(JSON_NODE** objectNode, JSON_NODE* value, int position) {
+// Добавление в объект на заданную позицию.
+bool addToObjectToNPos(JSON_NODE** objectNode, JSON_NODE* value, int position) {
 
-    checkPointer(value, "addToObjectToNPos", "value");
-    checkPointer(value->objectFieldName, "addToObjectToNPos", "value->objectFieldName");
-
-    addToJsonToNPos(objectNode, value, position);
-}
-void removeFromObject(JSON_NODE** objectNode, const char* fieldName) {
-
-    checkDoublePointer((void**)objectNode, "removeFromObject", "objectNode");
-    checkPointer(fieldName, "removeFromObject", "fieldName");
-
-    JSON_NODE* temp = findByFieldName(*objectNode, fieldName);
-    removeJsonNode(&temp);
+    return addToJsonToNPos(objectNode, value, position);
 }
 
-static void printField(JSON_NODE* jsonNode, int tabulation);
+// Удаление из объекта по полю.
+bool removeFromObject(JSON_NODE** objectNode, const char* fieldName) {
 
+    return removeJsonNodeByField(objectNode, fieldName);
+}
+
+// Вывод объекта JSON структурировано.
 static void printJsonStructuredTabs(JSON_NODE* json, int tabulation) {
 
     JSON_NODE* temp = json;
     printf("{\n");
 
-    while(temp != NULL) {
+    while(temp != NULL) {                                                 // Обход всех элементов объекта JSON.
 
-        TABULATION(tabulation);
-        printField(temp, tabulation);
+        TABULATION(tabulation);                                           // Табуляция, соответствующая уровню.
+        printField(temp, tabulation, false);              // Вывод поля.
 
         temp = temp->next;
         if(temp != NULL)
@@ -436,9 +620,13 @@ static void printJsonStructuredTabs(JSON_NODE* json, int tabulation) {
     printf("}\n");
 }
 
-static void printArrayValue(JSON_NODE* jsonNode, int tabulation) {
+// Вывод поля объекта JSON.
+static void printField(JSON_NODE* jsonNode, int tabulation, bool isArray) {
 
-    switch(jsonNode->type) {
+    if(isArray == false)
+        printf("\"%s\":", jsonNode->objectFieldName);              // Вывод названия поля, если это не объект массива.
+
+    switch(jsonNode->type) {                                              // Вывод поля в виде, соответствующем типу значения.
 
         case boolean:
             if(jsonNode->boolVal == true)
@@ -456,48 +644,6 @@ static void printArrayValue(JSON_NODE* jsonNode, int tabulation) {
             printf("\"%s\"", jsonNode->stringVal);
             break;
         case object:
-            printJsonStructuredTabs(jsonNode->current, tabulation);
-            break;
-        case array:
-            printf("\"%s\": [\n", jsonNode->objectFieldName);
-            for(JSON_NODE* temp = jsonNode->current; temp != NULL; temp = temp->next) {
-                
-                TABULATION(tabulation);
-                printArrayValue(jsonNode, tabulation + 1);
-
-                if(temp->next != NULL)
-                    printf(",\n");
-                else
-                    printf("\n");
-            }
-
-            TABULATION(tabulation);
-            printf("]\n");
-    }
-
-}
-
-static void printField(JSON_NODE* jsonNode, int tabulation) {
-
-    switch(jsonNode->type) {
-
-        case boolean:
-            if(jsonNode->boolVal == true)
-                printf("\"%s\":\"true\"", jsonNode->objectFieldName);
-            else
-                printf("\"%s\":\"false\"", jsonNode->objectFieldName);
-            break;
-        case number:
-            if(jsonNode->numberVal == (int)jsonNode->numberVal)
-                printf("\"%s\":%.0f", jsonNode->objectFieldName, jsonNode->numberVal);
-            else
-                printf("\"%s\":%g", jsonNode->objectFieldName, jsonNode->numberVal);
-            break;
-        case string:
-            printf("\"%s\":\"%s\"", jsonNode->objectFieldName, jsonNode->stringVal);
-            break;
-        case object:
-            printf("\"%s\":", jsonNode->objectFieldName);
             printJsonStructuredTabs(jsonNode->current, tabulation + 1);
             break;
         case array:
@@ -505,7 +651,7 @@ static void printField(JSON_NODE* jsonNode, int tabulation) {
             for(JSON_NODE* temp = jsonNode->current; temp != NULL; temp = temp->next) {
                 
                 TABULATION(tabulation + 1);
-                printArrayValue(temp, tabulation + 1);
+                printField(temp, tabulation + 1, true);
 
                 if(temp->next != NULL)
                     printf(",\n");
@@ -518,40 +664,73 @@ static void printField(JSON_NODE* jsonNode, int tabulation) {
     }
 }
 
+// Вывод объекта JSON структурировано.
 void printJsonStructured(JSON_NODE* json) {
 
-    checkPointer(json, "printJsonStructured", "json");
-    
-    printJsonStructuredTabs(json, 1);
+    pthread_self() == thread1 ? sPush(&checkStack1, "printJsonStructured") : sPush(&checkStack2, "printJsonStructured");
+
+    if(json != NULL)
+        printJsonStructuredTabs(json, 1);
+    else
+        handleError("json is NULL.", false, NULL, 0, NULL, 0, NULL);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
 }
+
+// Вывод объекта JSON в виде строки.
 void printJsonUnstructured(JSON_NODE* json) {
 
-    checkPointer(json, "printJsonUnstructured", "json");
+    pthread_self() == thread1 ? sPush(&checkStack1, "printJsonUnstructured") : sPush(&checkStack2, "printJsonUnstructured");
 
-    printf("%s\n", parseJsonToString(json));
+    if(json != NULL)
+        printf("%s\n", parseJsonToString(json));
+    else
+        handleError("json is NULL.", false, NULL, 0, NULL, 0, NULL);
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
 }
 
-static void addArrayValue(JSON_NODE* jsonNode, char** result) {
+// Добавление поля к строке с объектом JSON.
+static void addField(JSON_NODE* jsonNode, char** result, bool isArray) {
 
     char* temp = (char*)malloc(80);
-    switch(jsonNode->type) {
+    switch(jsonNode->type) {                                                                 // Форматирование строки в нужном виде в соответствии с типом поля и добавление к результату.
 
         case boolean:
-            if(jsonNode->boolVal == true)
-                sprintf(temp, "\"true\"");
-            else
-                sprintf(temp, "\"false\"");
+            if(jsonNode->boolVal == true) {
+                if (isArray == true)
+                    sprintf(temp, "\"true\"");
+                else
+                    sprintf(temp, "\"%s\":\"true\"", jsonNode->objectFieldName);
+            }
+            else {
+                if(isArray == true)
+                    sprintf(temp, "\"false\"");
+                else
+                    sprintf(temp, "\"%s\":\"false\"", jsonNode->objectFieldName);
+            }
             addString(result, temp);
             break;
         case number:
-            if(jsonNode->numberVal == (int)jsonNode->numberVal)
-                sprintf(temp, "%.0f", jsonNode->numberVal);
-            else
-                sprintf(temp, "%g", jsonNode->numberVal);
+            if(jsonNode->numberVal == (int)jsonNode->numberVal) {
+                if(isArray == true)
+                    sprintf(temp, "%.0f", jsonNode->numberVal);
+                else
+                    sprintf(temp, "\"%s\":%.0f", jsonNode->objectFieldName, jsonNode->numberVal);
+            }
+            else {
+                if(isArray == true)
+                    sprintf(temp, "%g", jsonNode->numberVal);
+                else
+                    sprintf(temp, "\"%s\":%g", jsonNode->objectFieldName, jsonNode->numberVal);
+            }
             addString(result, temp);
             break;
         case string:
-            sprintf(temp, "\"%s\"", jsonNode->stringVal);
+            if(isArray == true)
+                sprintf(temp, "\"%s\"", jsonNode->stringVal);
+            else
+                sprintf(temp, "\"%s\":\"%s\"", jsonNode->objectFieldName, jsonNode->stringVal);
             addString(result, temp);
             break;
         case object:
@@ -564,7 +743,7 @@ static void addArrayValue(JSON_NODE* jsonNode, char** result) {
             addString(result, temp);
             for(JSON_NODE* tempNode = jsonNode->current; tempNode != NULL; tempNode = tempNode->next) {
 
-                addArrayValue(tempNode, result);
+                addField(tempNode, result, true);
                 if(tempNode->next != NULL)
                     addString(result, ",");
             }
@@ -573,60 +752,22 @@ static void addArrayValue(JSON_NODE* jsonNode, char** result) {
     free(temp);
 }
 
-static void addField(JSON_NODE* jsonNode, char** result) {
-
-    char* temp = (char*)malloc(80);
-    switch(jsonNode->type) {
-
-        case boolean:
-            if(jsonNode->boolVal == true)
-                sprintf(temp, "\"%s\":\"true\"", jsonNode->objectFieldName);
-            else
-                sprintf(temp, "\"%s\":\"false\"", jsonNode->objectFieldName);
-            addString(result, temp);
-            break;
-        case number:
-            if(jsonNode->numberVal == (int)jsonNode->numberVal)
-                sprintf(temp, "\"%s\":%.0f", jsonNode->objectFieldName, jsonNode->numberVal);
-            else
-                sprintf(temp, "\"%s\":%g", jsonNode->objectFieldName, jsonNode->numberVal);
-            addString(result, temp);
-            break;
-        case string:
-            sprintf(temp, "\"%s\":\"%s\"", jsonNode->objectFieldName, jsonNode->stringVal);
-            addString(result, temp);
-            break;
-        case object:
-            sprintf(temp, "\"%s\":", jsonNode->objectFieldName);
-            addString(result, temp);
-            addString(result, parseJsonToString(jsonNode->current));
-            break;
-        case array:
-            sprintf(temp, "\"%s\":[", jsonNode->objectFieldName);
-            addString(result, temp);
-            for(JSON_NODE* tempNode = jsonNode->current; tempNode != NULL; tempNode = tempNode->next) {
-
-                addArrayValue(tempNode, result);
-                if(tempNode->next != NULL)
-                    addString(result, ",");
-            }
-            addString(result, "]");
-    }
-    free(temp);
-}
-
+// Сериализация объекта JSON в строку.
 char* parseJsonToString(JSON_NODE* json) {
 
-    checkPointer(json, "parseJsonToString", "json");
+    pthread_self() == thread1 ? sPush(&checkStack1, "parseJsonToString") : sPush(&checkStack2, "parseJsonToString");
 
-    JSON_NODE* temp = json;
-    char* result = (char*)malloc(1);
+    if(json == NULL)
+        return handleError("json is NULL.", true, NULL, 0, NULL, 0, NULL);
+
+    JSON_NODE* temp = json;                                 // Временный указатель для обхода полей.
+    char* result = (char*)malloc(1);                   // Строка с результатом.
     result[0] = '\0';
     addString(&result, "{");
 
     while(temp != NULL) {
 
-        addField(temp, &result);
+        addField(temp, &result, false);     // Добавление каждого поля.
         temp = temp->next;
 
         if(temp != NULL)
@@ -634,30 +775,29 @@ char* parseJsonToString(JSON_NODE* json) {
     }
     addString(&result, "}");
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }
 
+// Чтение названия поля.
 static char* parsePart(const char* str, int* i) {
 
     (*i)++;
     int j = *i;
-    while(j < stringLength(str) && str[j] != '\"')
+    while(j < stringLength(str) && str[j] != '\"')      // Поиск конца строки.
         j++;
-
-    if(j == stringLength(str)) {
-        printf("Error in 'parsePart' - j out of borders\n");
-        exit(0);
-    }
 
     char* result = (char*)malloc(j - *i);
 
     int a;
-    for(a = 0; *i<j; a++, (*i)++)
+    for(a = 0; *i<j; a++, (*i)++)                             // Копирование результата.
         result[a] = str[*i];
     result[a] = '\0';
 
     return result;
 }
+
+// Проверка, что переменная типа логической переменной.
 static bool isBool(const char* str, int i) {
 
     if(i + 4 > stringLength(str)) {
@@ -669,25 +809,28 @@ static bool isBool(const char* str, int i) {
     }
     return false;
 }
-static bool isNumber(const char symbol) {
+
+// Проверка, что переменная типа числа.
+static bool isNumber(char symbol) {
 
     if(symbol == '-' || (symbol >= '0' && symbol <= '9'))
         return true;
     return false;
 }
-static bool isString(const char symbol) {
+
+// Проверка, что переменная типа строки.
+static bool isString(char symbol) {
 
     return symbol == '\"';
 }
-static bool isArray(const char symbol) {
+
+// Проверка, что переменная типа массива.
+static bool isArray(char symbol) {
 
     return symbol == '[';
 }
-static bool isObject(const char symbol) {
 
-    return symbol == '{';
-}
-
+// Чтение переменной типа объекта.
 static void parseBool(JSON_NODE** result, const char* fieldName, const char* str, int* i) {
 
     (*i)++;
@@ -700,50 +843,35 @@ static void parseBool(JSON_NODE** result, const char* fieldName, const char* str
         *i += 5;
     }
 }
+
+// Чтение переменной типа строки.
 static void parseString(JSON_NODE** result, const char* fieldName, const char* str, int* i) {
 
-    addToJsonToNPos(result, createStringJsonNode(parsePart(str, i), fieldName), -1);
+    char* temp = parsePart(str, i);                                                                              // Чтение значения.
+    addToJsonToNPos(result, createStringJsonNode(temp, fieldName), -1);              // Добавление в объект.
+    free(temp);
 }
+
+// Чтение переменной типа числа.
 static void parseNumber(JSON_NODE** result, const char* fieldName, const char* str, int* i) {
 
-    bool negative = false, integer = true;
-    double number = 0, divisor = 1;
-    while(isNumber(str[*i]) || str[*i] == '.') {
+    int j = *i;
+    for(; isNumber(str[j]) || str[j] == '.'; j++);
 
-        if(str[*i] == '-') {
-            negative = true;
-            (*i)++;
-            continue;
-        }
-        if(str[*i] == '.') {
-            integer = false;
-            (*i)++;
-            continue;
-        }
-        number = number * 10 + str[*i] - '0';
+    char* temp = copyStringFromIToSymbol(str, i, str[j]);                                               // Чтение значения.
+    double number = stringToDouble(temp);                                                                    // Конвертирование в число.
+    free(temp);
 
-        if(!integer)
-            divisor *= 10;
-        (*i)++;
-    }
-
-    if(!integer)
-        number /= divisor;
-    if(negative)
-        number *= -1;
-    (*i)--;
-
-    addToJsonToNPos(result, createNumberJsonNode(number, fieldName), -1);
+    addToJsonToNPos(result, createNumberJsonNode(number, fieldName), -1);          // Добавление в объект.
 }
 
-static void parseObject(JSON_NODE** result, const char* fieldName, const char* str, int* i);
-
+// Чтение переменной типа массива.
 static void parseArray(JSON_NODE** result, const char* fieldName, const char* str, int* i) {
 
     JSON_NODE* array = NULL;
 
     (*i)++;
-    if(isBool(str, *i + 1)) {
+    if(isBool(str, *i + 1) == true) {                                                                          // Чтение массива соответствующего типа.
         while(*i < stringLength(str)) {
 
             parseBool(&array, fieldName, str, i);
@@ -753,7 +881,7 @@ static void parseArray(JSON_NODE** result, const char* fieldName, const char* st
             *i += 2;
         }
     }
-    else if(isString(str[*i])) {
+    else if(isString(str[*i]) == true) {
         while(*i < stringLength(str)) {
 
             parseString(&array, fieldName, str, i);
@@ -763,7 +891,7 @@ static void parseArray(JSON_NODE** result, const char* fieldName, const char* st
             *i += 2;
         }
     }
-    else if(isNumber(str[*i])) {
+    else if(isNumber(str[*i]) == true) {
         while(*i < stringLength(str)) {
 
             parseNumber(&array, fieldName, str, i);
@@ -773,7 +901,7 @@ static void parseArray(JSON_NODE** result, const char* fieldName, const char* st
             *i += 2;
         }
     }
-    else if(isArray(str[*i])) {
+    else if(isArray(str[*i]) == true) {
         while(*i < stringLength(str)) {
 
             parseArray(&array, fieldName, str, i);
@@ -795,8 +923,10 @@ static void parseArray(JSON_NODE** result, const char* fieldName, const char* st
     }
     (*i)++;
 
-    addToJsonToNPos(result, createArrayJsonNode(array, fieldName), -1);
+    addToJsonToNPos(result, createArrayJsonNode(array, fieldName), -1);               // Добавление в объект.
 }
+
+// Чтение переменной типа объект.
 static void parseObject(JSON_NODE** result, const char* fieldName, const char* str, int* i) {
 
     JSON_NODE* object = NULL;
@@ -807,16 +937,18 @@ static void parseObject(JSON_NODE** result, const char* fieldName, const char* s
         char* tempFieldName = parsePart(str, i);
         (*i) += 2;
 
-        if(isBool(str, *i + 1))
+        if(isBool(str, *i + 1) == true)                                                                        // Чтение переменной в соответствии с типом.
             parseBool(&object, tempFieldName, str, i);
-        else if(isString(str[*i]))
+        else if(isString(str[*i]) == true)
             parseString(&object, tempFieldName, str, i);
-        else if(isNumber(str[*i]))
+        else if(isNumber(str[*i]) == true)
             parseNumber(&object, tempFieldName, str, i);
-        else if(isArray(str[*i])) 
+        else if(isArray(str[*i]) == true)
             parseArray(&object, tempFieldName, str, i);
         else 
             parseObject(&object, tempFieldName, str, i);
+
+        free(tempFieldName);
 
         if(str[*i + 1] == '}')
             break;
@@ -824,35 +956,44 @@ static void parseObject(JSON_NODE** result, const char* fieldName, const char* s
     }
     (*i)++;   
 
-    addToJsonToNPos(result, createObjectJsonNode(object, fieldName), -1); 
+    addToJsonToNPos(result, createObjectJsonNode(object, fieldName), -1);            // Добавление в объект.
 }
 
+// Десериализация строки в объект JSON.
 JSON_NODE* parseStringToJson(const char* str) {
 
-    checkPointer(str, "parseStringToJson", "str");
+    pthread_self() == thread1 ? sPush(&checkStack1, "parseStringToJson") : sPush(&checkStack2, "parseStringToJson");
+
+    if(checkJsonString(str) != true)
+        return (JSON_NODE*) handleError("str is NULL or has wrong format.", true, NULL, 2, NULL, 0, NULL);
 
     JSON_NODE* result = NULL;
     int strLen = stringLength(str), i = 1;
     
     while(i < strLen) {
 
-        char* tempFieldName = parsePart(str, &i);
+        char* tempFieldName = parsePart(str, &i);                                                                 // Чтение названия поля.
 
-        i+=2; // skip :
-        if(isBool(str, i+1))
+        i+=2;                                                                                                     // Пропуск символа ":".
+        if(isBool(str, i+1) == true)                                                                           // Чтение данных в соответствии с их типом и добавление в объект.
             parseBool(&result, tempFieldName, str, &i);
-        else if(isString(str[i]))
+        else if(isString(str[i]) == true)
             parseString(&result, tempFieldName, str, &i);
-        else if(isNumber(str[i]))
+        else if(isNumber(str[i]) == true)
             parseNumber(&result, tempFieldName, str, &i);
-        else if(isArray(str[i]))
+        else if(isArray(str[i]) == true)
             parseArray(&result, tempFieldName, str, &i);
         else
             parseObject(&result, tempFieldName, str, &i);
+
+        free(tempFieldName);
+
         if(str[i+1] == '}')
             break;
 
-        i+=2; // skip ,
+        i+=2;                                                                                                     // Пропуск "," между объектами.
     }
+
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return result;
 }

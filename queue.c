@@ -1,8 +1,9 @@
 #include "queue.h"
 
-static NODE* makeNode(const char* data) {
+// Создание узла очереди.
+static QNODE* makeQnode(const char* data) {
 
-    NODE* node = (NODE*)malloc(sizeof(NODE));
+    QNODE* node = (QNODE*)malloc(sizeof(QNODE));
 
     node->next = NULL;
     node->prev = NULL;
@@ -11,27 +12,29 @@ static NODE* makeNode(const char* data) {
     return node;
 }
 
-void push(NODE** queue, const char* data) {
+// Добавление в очередь.
+void qPush(QNODE** queue, const char* data) {
 
-    if(queue != NULL) {
+    if(queue != NULL && data != NULL) {
         if (*queue == NULL)
-            *queue = makeNode(data);
+            *queue = makeQnode(data);
         else {
-            NODE* temp = *queue;
+            QNODE* temp = *queue;
             while(temp->next != NULL)
                 temp = temp->next;
 
-            temp->next = makeNode(data);
+            temp->next = makeQnode(data);
             temp->next->prev = temp;
         }
     }
 }
 
-void pop(NODE** queue) {
+// Удаление из очереди.
+void qPop(QNODE** queue) {
 
     if(queue != NULL && *queue != NULL) {
 
-        NODE* temp = *queue;
+        QNODE* temp = *queue;
         *queue = (*queue)->next;
 
         free(temp);

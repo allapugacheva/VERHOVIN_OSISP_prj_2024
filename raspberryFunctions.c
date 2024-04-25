@@ -1,108 +1,91 @@
 #include "raspberryFunctions.h"
 
-static uint8_t parsePulse(int level) {
-    int count = 0;
+int dht11_dat[5] = {0, 0, 0, 0, 0};                          // Данные с датчика температуры и влажности.
+int maxCycles = 255;                                                             // Максимальное количество попыток считать бит при передаче данных с датчика температуры и влажности.
 
-    while(digitalRead(DHTPIN) == level) {
-        delayMicroseconds(1);
-        if (count++ >= maxcycles)
+// Чтение бита данных с датчика температуры и влажности.
+static uint8_t parsePulse(int level) {
+
+    int count = 0;
+    while(digitalRead(DHTPIN) == level) {                                        // Чтение бита и проверка, что он равен указанному уровню сигнала.
+        delayMicroseconds(1);                                                    // Ожидание одну микросекунду.
+        if (count++ >= maxCycles)
             return -1;
     }
 
     return count;
 }
 
-static bool read_dht11_dat(double* temperature, double* humidity) {
+// Чтение данных с датчика температуры и влажности.
+static bool readDht11Data(double* temperature, double* humidity) {
 
-    for(int i = 0; i<5; i++) {
+    pthread_self() == thread1 ? sPush(&checkStack1, "readDht11Data") : sPush(&checkStack2, "readDht11Data");
 
-        olddht11_dat[i] = dht11_dat[i];
+    for(int i = 0; i<5; i++)                                                     // Очистка предыдущих данных.
         dht11_dat[i] = 0;
-    }
 
-    pinMode(DHTPIN, OUTPUT);
-    digitalWrite(DHTPIN, LOW);      // init signal to dht11
-    delay(18);                        // wait 18 milliseconds to ensure DHT's detection of signal
-    digitalWrite(DHTPIN, HIGH);     // send that raspberry wait signal
-    delayMicroseconds(40);          // wait DHT's response
-    pinMode(DHTPIN, INPUT);
+    pinMode(DHTPIN, OUTPUT);                                                     // Установка режима записи на GPIO.
+    digitalWrite(DHTPIN, LOW);                                                   // Подачи низкого уровня сигнала для сообщения датчику, что компьютер хочет считать данные.
+    delay(18);                                                                   // Ожидание 18 миллисекунд, чтобы датчик принял сигнал.
+    digitalWrite(DHTPIN, HIGH);                                                  // Подача сигнала датчику, что компьютер готов к приёму сигнала.
+    delayMicroseconds(40);                                                       // Ожидание ответа от датчика.
+    pinMode(DHTPIN, INPUT);                                                      // Установка режима чтения с GPIO.
 
     if(parsePulse(LOW) == -1)
-        return false;
+        return *(bool*)handleError("error while receive LOW level.", true, NULL, 1, NULL, 0, NULL);
     if(parsePulse(HIGH) == -1)
-        return false;
+        return *(bool*)handleError("error while receive HIGH level.", true, NULL, 1, NULL, 0, NULL);
 
-    uint8_t cycles[80];
-    for (int i = 0; i < 80; i+=2 ) {
+    uint8_t cycles[80];                                                          // Данные с датчика.
+    for (int i = 0; i < 80; i+=2 ) {                                             // Ожидание 40 бит.
 
-        cycles[i] = parsePulse(LOW);
-        cycles[i+1] = parsePulse(HIGH);
+        cycles[i] = parsePulse(LOW);                                       // Низкий уровень сигнала информирует о начале передачи бита.
+        cycles[i+1] = parsePulse(HIGH);                                    // По длительности высокого уровня сигналов получаем бит (26-28 мкс - "0", 70 мкс - "1").
     }
 
-    for(int i = 0; i<40; i++) {
+    for(int i = 0; i<40; i++) {                                                 // Обработка 40 полученных бит.
 
         if(cycles[2*i] == -1 || cycles[2*i+1] == -1)
-            return false;
+            return *(bool*)handleError("error while read data from dht11.", true, NULL, 1, NULL, 0, NULL);
 
-        dht11_dat[i/8] <<= 1;
+        dht11_dat[i/8] <<= 1;                                                   // Сдвиг результата.
 
-        if(cycles[2*i] < cycles[2*i + 1])
-            dht11_dat[i/8] |= 1;
+        if(cycles[2*i] < cycles[2*i + 1])                                       // Проверка, что пришёл сигнал логической "1".
+            dht11_dat[i/8] |= 1;                                                // Установка бита в 1.
     }
-
+                                                                                // Сверка контрольной суммы.
     if (dht11_dat[4] == ((dht11_dat[0] + dht11_dat[1] + dht11_dat[2] + dht11_dat[3]) & 0xFF)) {
-        *humidity = dht11_dat[0] + (double)dht11_dat[1] / divisorForDouble(dht11_dat[1]);
+        *humidity = dht11_dat[0] + (double)dht11_dat[1] / divisorForDouble(dht11_dat[1]);     // Получение значений влажности и температуры.
         *temperature = dht11_dat[2] + (double)dht11_dat[3] / divisorForDouble(dht11_dat[3]);
-        //printf("Humidity = %d.%d %% Temperature = %d.%d C\n", dht11_dat[0], dht11_dat[1], dht11_dat[2], dht11_dat[3]);
+        pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
         return true;
     }
     else
-        return false;
-        //printf("Humidity = %d.%d %% Temperature = %d.%d C\n", olddht11_dat[0], olddht11_dat[1], olddht11_dat[2], olddht11_dat[3]);
+        return *(bool*)handleError("error while check control sum while read data from dht11.", true, NULL, 1, NULL, 0, NULL);
 }
 
+// Чтение данных с датчика.
 RASPBERRY_SENSORS* readData() {
 
-    time_t current_time;
+    pthread_self() == thread1 ? sPush(&checkStack1, "readData") : sPush(&checkStack2, "readData");
+
+    int maxTries = 10;
+    time_t current_time;                                                       // Структуры для текущего времени.
     struct tm * time_info;
     RASPBERRY_SENSORS* data = (RASPBERRY_SENSORS*)malloc(sizeof(RASPBERRY_SENSORS));
 
-    while(!read_dht11_dat(&data->temperature, &data->humidity))
+    while(readDht11Data(&data->temperature, &data->humidity) != true && maxTries-- > 0) // Чтение данных с датчика температуры и влажности.
         delay(1000);
-    data->hasLoud = digitalRead(MICROPIN);
+    if(maxTries == 0) {
+        free(data);
+        return handleError("error while read data from dht11.", true, NULL, 0, NULL, 0, NULL);
+    }
+    data->hasLoud = digitalRead(MICROPIN);                                     // Чтение данных с микрофона.
 
-    time(&current_time);
+    time(&current_time);                                                 // Чтение текущего времени.
     data->dateTime = asctime(localtime(&current_time));
+    data->dateTime[stringLength(data->dateTime) - 1] = '\0';
 
+    pthread_self() == thread1 ? sPop(&checkStack1) : sPop(&checkStack2);
     return data;
 }
-
-//int main()
-//{
-//    if (wiringPiSetup() == -1)
-//        exit(0);
-//
-//    pinMode(RELAYPIN, OUTPUT);
-//    pinMode(MICROPIN, INPUT);
-//    int times;
-//
-//    while(1) {
-//
-//        times = 5;
-//        digitalWrite(RELAYPIN, LOW);
-//        while (times--) {
-//            delay(10000);
-//            read_dht11_dat();
-//        }
-//
-//        times = 5;
-//        digitalWrite(RELAYPIN, HIGH);
-//        while(times--) {
-//            delay(10000);
-//            read_dht11_dat();
-//            printf("Has sound: %d\n", digitalRead(MICROPIN));
-//        }
-//    }
-//
-//    return(0);
-//}

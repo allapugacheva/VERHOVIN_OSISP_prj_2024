@@ -1,7 +1,6 @@
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -9,20 +8,12 @@
 #include <netdb.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdbool.h>
 #include <sys/select.h>
-#include "stringFunctions.h"
-#include "checkingFunctions.h"
-
-
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 #include "json.h"
 
+// Библиотека для работы с HTTP запросами.
 
-#define HTTP_STATUS_200 "200 Ok"
+#define HTTP_STATUS_200 "200 Ok"                                                  // Коды HTTP запросов.
 #define HTTP_STATUS_201 "201 Created"
 #define HTTP_STATUS_204 "204 No content"
 
@@ -31,89 +22,98 @@
 
 #define HTTP_STATUS_500 "500 Internal server error"
 
-#define HTTP_PROTOCOL_VERSION "HTTP/1.1"
+#define HTTP_PROTOCOL_VERSION "HTTP/1.1"                                          // Версия HTTP протокола.
 
-#define REQUEST_MALLOC ((HTTP_REQUEST*)malloc(sizeof(HTTP_REQUEST)))
+#define REQUEST_MALLOC ((HTTP_REQUEST*)malloc(sizeof(HTTP_REQUEST)))              // Макросы для выделения места под запрос, ответ и заголовок.
 #define RESPONSE_MALLOC ((HTTP_RESPONSE*)malloc(sizeof(HTTP_RESPONSE)))
 #define HEADER_MALLOC ((HEADER*)malloc(sizeof(HEADER)))
 
-typedef enum http_requests {
+typedef enum http_requests {                                                      // Типы HTTP запросов.
     get_request = 0,
     post_request,
     put_request,
     delete_request
 } HTTP_REQUESTS;
 
-typedef struct header {
+typedef struct header {                                                           // Заголовок HTTP запроса/ответа.
 
     struct header* prev;
     struct header* next;
-    char* name;
-    char* value;
+    char* name;                                                                   // Название заголовка.
+    char* value;                                                                  // Значение.
 
 } HEADER;
 
-typedef struct http_request {
+typedef struct http_request {                                                     // HTTP запрос.
 
-    int requestType;
-    int port;
-    char* url;
-    HEADER* headers;
-    char* content;
+    int requestType;                                                              // Тип запроса.
+    int port;                                                                     // Порт, по которому происходит подключение.
+    char* url;                                                                    // Юрл запроса.
+    HEADER* headers;                                                              // Заголовки HTTP запроса.
+    char* content;                                                                // Содержимое запроса.
 
 } HTTP_REQUEST;
 
-typedef struct http_response {
+typedef struct http_response {                                                    // HTTP ответ.
 
-    char* responseStatus;
-    HEADER* headers;
-    char* content;
+    char* responseStatus;                                                         // HTTP статус ответа.
+    HEADER* headers;                                                              // Заголовки HTTP ответа.
+    char* content;                                                                // Содержимое ответа.
 
 } HTTP_RESPONSE;
 
-int initClient(const char* address, int portNumber);
-int initServer(int portNumber);
+#define HEADER_ERROR &(HEADER){.value = "error"}
+#define IS_HEADER_ERROR(header) (compareString((header).value, "error") == 0)
 
-HTTP_REQUEST* requestInit();
-HTTP_REQUEST* requestInitWithParams(int requestType, const char* url, HEADER* headers, const char* content, int portNumber);
-void requestFree(HTTP_REQUEST** request);
+#define REQUEST_ERROR &(HTTP_REQUEST){.content = "error"}
+#define IS_REQUEST_ERROR(request) ((request).content != NULL && compareString((request).content, "error") == 0)
 
-HTTP_RESPONSE* responseInit();
-HTTP_RESPONSE* responseInitWithParams(const char* responseStatus, HEADER* headers, const char* content);
-void responseFree(HTTP_RESPONSE** response);
+#define RESPONSE_ERROR &(HTTP_RESPONSE){.content = "error"}
+#define IS_RESPONSE_ERROR(response) ((response).content != NULL && compareString((response).content, "error") == 0)
 
-static char** parseNameValueString(const char* nameValue);
-HEADER* initHeaders(int count, ...);
-static void addToHeaders(HEADER** headers, const char* nameValue);
-HEADER* findHeader(HEADER* headers, const char* name);
-static void headersFree(HEADER** headers);
+int initClient(const char* address, int portNumber);                              // Инициализация клиента.
+int initServer(int portNumber);                                                   // Инициализация сервера.
 
-void setHttpRequestType(HTTP_REQUEST** request, int type);
-void setHttpRequestUrl(HTTP_REQUEST** request, const char* url);
-void addHttpRequestHeader(HTTP_REQUEST** request, HEADER* httpHeader);
-void setHttpRequestData(HTTP_REQUEST** request, const char* data);
+HTTP_REQUEST* requestInit();                                                      // Инициализация пустого HTTP запроса.
+HTTP_REQUEST* requestInitWithParams(int requestType, const char* url, HEADER* headers, const char* content, int portNumber); // Инициализация HTTP запроса с параметрами.
+bool requestFree(HTTP_REQUEST** request);                                         // Освобождение HTTP запроса.
 
-char* convertHttpRequestToString(HTTP_REQUEST* request);
-HTTP_REQUEST* convertHttpRequestToObject(const char* request);
+HTTP_RESPONSE* responseInit();                                                    // Инициализация пустого ответа.
+HTTP_RESPONSE* responseInitWithParams(const char* responseStatus, HEADER* headers, const char* content);  // Инициализация HTTP запроса с параметрами.
+bool responseFree(HTTP_RESPONSE** response);                                      // Освобождение HTTP ответа.
 
-static bool checkHttpRequest(HTTP_REQUEST* request);
-HTTP_RESPONSE* sendHttpRequest(HTTP_REQUEST** request);
+HEADER* initHeaders(int count, const char** nameValues);                          // Инициализация заголовков.
+HEADER* findHeader(HEADER* headers, const char* name);                            // Поиск заголовка по названию.
 
-void setHttpResponseStatus(HTTP_RESPONSE** response, const char* status);
-void addHttpResponseHeader(HTTP_RESPONSE** response, HEADER* httpHeader);
-void setHttpResponseData(HTTP_RESPONSE** response, const char* data);
+bool setHttpRequestType(HTTP_REQUEST** request, int type);                        // Установить тип HTTP запроса.
+bool setHttpRequestUrl(HTTP_REQUEST** request, const char* url);                  // Установить юрл HTTP запроса.
+bool addHttpRequestHeader(HTTP_REQUEST** request, HEADER* httpHeader);            // Добавить заголовок HTTP запроса.
+bool setHttpRequestData(HTTP_REQUEST** request, const char* data);                // Установить содержимое HTTP запроса.
 
-char* convertHttpResponseToString(HTTP_RESPONSE* response);
-HTTP_RESPONSE* convertHttpResponseToObject(const char* response);
+char* convertHttpRequestToString(HTTP_REQUEST* request);                          // Перевести HTTP запрос в строку.
+HTTP_REQUEST* convertHttpRequestToObject(const char* request);                    // Перевести строку в HTTP запрос.
 
-static bool checkHttpResponse(HTTP_RESPONSE* response);
-HTTP_REQUEST* getHttpRequest(int sfd);
-void sendHttpResponse(int sfd, HTTP_RESPONSE** response);
+HTTP_RESPONSE* sendHttpRequest(HTTP_REQUEST** request);                           // Отправить HTTP запрос.
 
-// set method GET POST PUT DELETE + data
-// set headers Content-Type: application/json and ect
-//             application/json by default - don't plan to send other types
-// set URL - when add also add header HOST first part from https:// to /, then address from / to end
+bool setHttpResponseStatus(HTTP_RESPONSE** response, const char* status);         // Установить статус HTTP ответа.
+bool addHttpResponseHeader(HTTP_RESPONSE** response, HEADER* httpHeader);         // Добавить заголовок HTTP ответа.
+bool setHttpResponseData(HTTP_RESPONSE** response, const char* data);             // Установить содержимое HTTP запроса.
+
+char* convertHttpResponseToString(HTTP_RESPONSE* response);                       // Перевод HTTP ответа в строку.
+HTTP_RESPONSE* convertHttpResponseToObject(const char* response);                 // Перевод строки в HTTP ответ.
+
+HTTP_REQUEST* getHttpRequest(int sfd);                                            // Получить HTTP запрос.
+bool sendHttpResponse(int sfd, HTTP_RESPONSE** response);                         // Отправить HTTP ответ.
+
+//----------------------------------------------------------------------------------------------------------------------
+
+static char** parseNameValueString(const char* nameValue);                        // Чтение названия заголовка и его содержимого.
+
+static void addToHeaders(HEADER** headers, const char* nameValue);                // Добавление нового заголовка.
+static void headersFree(HEADER** headers);                                        // Освобождение заголовков.
+
+static bool checkHttpRequest(HTTP_REQUEST* request);                              // Проверить запрос на наличие необходимых полей.
+static bool checkHttpResponse(HTTP_RESPONSE* response);                           // Проверка HTTP ответа на наличие необходимых полей.
 
 // REQUEST:
 // GET /api HTTP/1.1
@@ -129,8 +129,6 @@ void sendHttpResponse(int sfd, HTTP_RESPONSE** response);
 // Host: example.com
 // User-Agent: Raspberry pi zero w
 // Accept: application/json
-
-// define HTTP statuses
 
 // RESPONSE:
 // HTTP/1.1 200 OK

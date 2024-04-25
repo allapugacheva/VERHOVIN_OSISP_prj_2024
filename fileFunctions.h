@@ -1,17 +1,21 @@
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <fcntl.h>
-#include "stringFunctions.h"
 #include "json.h"
 #include "queue.h"
 
-FILE* openFile(const char* fileName, const char* mode);
-void addStringToFile(const char* fileName, const char* data);
-void showContent(const char* fileName);
-void sortContent(const char* fileName, const char* field);
-void clearFile(const char* fileName);
-void readToQueue(NODE** queue, const char* fileName);
-void writeFromQueue(NODE* queue, const char* fileName);
-void sortFileByJsonField(const char* fileName, const char* fieldName);
+// Функции для работы с файлами.
+
+bool addStringToFile(const char* fileName, const char* data);                          // Добавить строку в файл.
+bool showContent(const char* fileName);                                                // Отобразить содержимое файла.
+bool sortContent(const char* fileName, const char* field);                             // Сортировка содержимого файла по полю JSON объекта.
+bool clearFile(const char* fileName);                                                  // Очистить файл.
+bool readToQueue(QNODE** queue, const char* fileName);                                  // Записать данные из файла в очередь.
+bool writeFromQueue(QNODE* queue, const char* fileName);                                // Записать данные из очереди в файл.
+
+//----------------------------------------------------------------------------------------------------------------------
+
+static bool ifFileEmpty(FILE* f);                                                      // Проверка, что файл пуст.
+static int compareByField(const char* str1, const char* str2, const char* fieldName);  // Сравнение двух строк файла по указанному полю JSON объекта.
+static void quicksort(char*** arr, int left, int right, const char* fieldName);        // Быстрая сортировка для строк файла.

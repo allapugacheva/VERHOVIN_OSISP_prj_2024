@@ -1,159 +1,134 @@
-#include "header.h"
+#include "server.h"
 
-bool continuing = true;
-NODE* queue = NULL;
-pthread_cond_t condQueue;
-pthread_mutex_t mutexQueue;
+bool continuing = true;                                                                            // Флаг для остановок потоков программы.
+QNODE* queue = NULL;                                                                               // Очередь сообщений на запись.
+pthread_cond_t condQueue;                                                                          // Условная переменная для работы с очередью сообщений.
+pthread_mutex_t mutexQueue;                                                                        // Мьютекс для работы с очередью сообщений.
 
-void* fillerHandler(void* arg) {
-
-    char* fileName = (char*)arg;
-
-    while(continuing) {
-
-        pthread_mutex_lock(&mutexQueue);
-
-        while (queue == NULL) {
-            if(!continuing) {
-                pthread_mutex_unlock(&mutexQueue);
-                return NULL;
-            }
-            pthread_cond_wait(&condQueue, &mutexQueue);
-        }
-
-        addStringToFile(fileName, queue->data);
-        pop(&queue);
-
-        pthread_mutex_unlock(&mutexQueue);
-    }
-}
-
-void *receiveHandler(void *arg) {
-
-    int sfd = initServer(*(int*)arg);
-
-    struct timeval timeout;
-    timeout.tv_sec = 5;
-    timeout.tv_usec = 0;
-
-    fd_set readfds;
-
-    while(continuing) {
-
-        FD_ZERO(&readfds);
-        FD_SET(sfd, &readfds);
-
-        timeout.tv_sec = 5;
-        timeout.tv_usec = 0;
-
-        int ready = select(sfd + 1, &readfds, NULL, NULL, &timeout);
-        if(ready <= 0) {
-            continue;
-        }
-
-        if (FD_ISSET(sfd, &readfds)) {
-
-            int cfd = accept(sfd, NULL, 0);
-            if (cfd == -1) {
-                printf("Error while client connection.\n");
-                close(sfd);
-                close(cfd);
-                exit(0);
-            }
-
-            HTTP_REQUEST *request = getHttpRequest(cfd);
-
-            pthread_mutex_lock(&mutexQueue);
-
-            push(&queue, request->content);
-            if (queue->next == NULL)
-                pthread_cond_signal(&condQueue);
-
-            pthread_mutex_unlock(&mutexQueue);
-
-            requestFree(&request);
-
-            HTTP_RESPONSE *response = responseInitWithParams(HTTP_STATUS_200, NULL, NULL);
-            sendHttpResponse(cfd, &response);
-            responseFree(&response);
-        }
-    }
-
-    pthread_cond_signal(&condQueue);
-}
-
-void stop() {
-    continuing = false;
-}
-
+// Запуск: ./server filename portNumber(8080 если не указан)
 int main(int argc, char* argv[]) {
 
+    sPush(&checkStack1, "main");
+    sPush(&checkStack2, "main");
+
+    freopen("serverErrors.log", "w", stderr);
+
+    initNums();
+
     if(argc < 2) {
-        printf("Not enough arguments.\n");
+        handleError("not enough arguments.", false, NULL, 0, NULL, 0, NULL);
+        printf("Server stopped work with error. To see more information open file 'serverErrors.log'.\n");
+        sPop(&checkStack1);
+        sPop(&checkStack2);
         exit(0);
     }
-    int portNumber = argc == 3 ? (int)CTOD(argv[3]) : -1;
+    int portNumber = argc == 3 ? (int)stringToDouble(argv[3]) : -1;                            // Обработка порта сервера.
 
-    signal(SIGUSR1, stop);
+    signal(SIGUSR1, stop);                                                             // Установка сигнала завершения работы.
+    signal(SIGUSR2, err);
 
-    pthread_cond_init(&condQueue, NULL);
+    pthread_cond_init(&condQueue, NULL);                                            // Инициализация условной переменной и мьютекса.
     pthread_mutex_init(&mutexQueue, NULL);
 
-    pthread_t handlerThread;
-    if(pthread_create(&handlerThread, NULL, receiveHandler, &portNumber) != 0) {
-        printf("Error while open server.\n");
-        exit(0);
-    }
-    pthread_t fillerTread;
-    if(pthread_create(&fillerTread, NULL, fillerHandler, argv[1]) != 0) {
-        printf("Error while open filler.\n");
-        exit(0);
+    if(pthread_create(&thread1, NULL, receiveHandler, &portNumber) != 0) {
+        handleError("error while start reader thread.", false, &continuing, 0, NULL, 0, NULL);
+        pthread_kill(thread1, SIGUSR2);
+        sleep(1);
     }
 
-    while(continuing) {
+    if(continuing != error)
+        if(pthread_create(&thread2, NULL, fillerHandler, argv[1]) != 0) {
+            handleError("error while start filler thread.", false, &continuing, 0, NULL, 0, NULL);
+            pthread_kill(thread1, SIGUSR2);
+            sleep(1);
+        }
+
+    while(continuing == true) {                                                                   // Базовой меню для работы с данными.
 
         printf("1) Show data\n2) Sort data\n3) Clear data\n4) Exit\nSelect variant: ");
-        switch (getchar()) {
+        int ch = getchar();
+        system("clear");
+        switch (ch) {
             case '1':
-
-                showContent(argv[1]);
+                if(showContent(argv[1]) == error) {                                      // Вывод данных на экран.
+                    handleError("error while show content.", false, NULL, 0, NULL, 0, NULL);
+                    pthread_kill(thread1, SIGUSR2);
+                    sleep(1);
+                }
                 break;
             case '2': {
-                while (getchar() != '\n')
+                while (getchar() != '\n')                                                         // Сортировка данных по полю.
                     continue;
 
                 printf("1) DateAndTime\n2) Temperature\n3) Humidity\n4) Loud\nSelect field to sort by: ");
+                char* tempField = NULL;
                 switch (getchar()) {
                     case '1':
-                        sortContent(argv[1], "dateAndTime");
+                        copyString(&tempField, "dateAndTime");
                         break;
                     case '2':
-                        sortContent(argv[1], "temperature");
+                        copyString(&tempField, "temperature");
                         break;
                     case '3':
-                        sortContent(argv[1], "humidity");
+                        copyString(&tempField, "humidity");
                         break;
                     case '4':
-                        sortContent(argv[1], "hasLoud");
+                        copyString(&tempField, "hasLoud");
                         break;
                 }
+
+                if(sortContent(argv[1], tempField) == error) {
+                    handleError("error while sort by field.", false, NULL, 0, NULL, 0, NULL);
+                    pthread_kill(thread1, SIGUSR2);
+                    sleep(1);
+                }
+
+                free(tempField);
                 break;
             }
             case '3':
-                clearFile(argv[1]);
+                if(clearFile(argv[1]) == error) {                                       // Очистить файл.
+                    handleError("error while clear file.", false, NULL, 0, NULL, 0, NULL);
+                    pthread_kill(thread1, SIGUSR2);
+                    sleep(1);
+                }
                 break;
-            case '4':
-                pthread_kill(handlerThread, SIGUSR1);
-                pthread_join(handlerThread, NULL);
-                pthread_join(fillerTread, NULL);
+            default:
+                pthread_kill(thread1, SIGUSR1);                                    // Завершение работы.
+                sleep(1);
                 break;
         }
         while (getchar() != '\n')
             continue;
     }
 
-    pthread_mutex_destroy(&mutexQueue);
+    pthread_join(thread1, NULL);                                                 // Ожидание завершения процессов.
+    pthread_join(thread2, NULL);
+
+    pthread_mutex_destroy(&mutexQueue);                                                  // Деинициализация мьютекса и условной переменной.
     pthread_cond_destroy(&condQueue);
+
+    while(queue != NULL) {
+        if(addStringToFile(argv[1], queue->data) == error) {
+            handleError("error while add data from queue to file.", false, &continuing, 0, NULL, 0, NULL);
+
+            while(queue != NULL)
+                qPop(&queue);
+
+            break;
+        }
+        qPop(&queue);
+    }
+
+    if(continuing == error)
+        printf("Server stopped work with error. To see more information open file 'serverErrors.log'.\n");
+    else
+        printf("Server successfully finished work.\n");
+
+    sPop(&checkStack1);
+    sPop(&checkStack2);
+
+    freeNums();
 
     return 0;
 }
